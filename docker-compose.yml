@@ -1,0 +1,80 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - gateway
+
+  gateway:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn gateway.app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8001
+      AI_SERVICE_URL: http://ai-service:8002
+      VOICE_SERVICE_URL: http://voice-service:8003
+      EXECUTOR_SERVICE_URL: http://executor-service:8004
+      JWT_SECRET: superhero-dev-secret
+    ports:
+      - "8000:8000"
+    depends_on:
+      - auth-service
+      - ai-service
+      - voice-service
+      - executor-service
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn services.auth.app.main:app --host 0.0.0.0 --port 8001
+    environment:
+      JWT_SECRET: superhero-dev-secret
+    ports:
+      - "8001:8001"
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn services.ai.app.main:app --host 0.0.0.0 --port 8002
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen3.6-plus:free}
+      NVIDIA_AI_API_KEY: ${NVIDIA_AI_API_KEY:-}
+      NVIDIA_AI_MODEL: ${NVIDIA_AI_MODEL:-nvidia/tiiuae/falcon3-7b-instruct}
+    ports:
+      - "8002:8002"
+
+  voice-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn services.voice.app.main:app --host 0.0.0.0 --port 8003
+    environment:
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      VOICE_SPIDERMAN_ID: ${VOICE_SPIDERMAN_ID:-hero_spiderman}
+      VOICE_BATMAN_ID: ${VOICE_BATMAN_ID:-hero_batman}
+      VOICE_SUPERMAN_ID: ${VOICE_SUPERMAN_ID:-hero_superman}
+      VOICE_IRONMAN_ID: ${VOICE_IRONMAN_ID:-hero_ironman}
+    ports:
+      - "8003:8003"
+
+  executor-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn services.executor.app.main:app --host 0.0.0.0 --port 8004
+    environment:
+      ENABLE_DOCKER_SANDBOX: "true"
+      DOCKER_TIMEOUT_SECONDS: "20"
+    ports:
+      - "8004:8004"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

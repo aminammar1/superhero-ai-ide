@@ -1,0 +1,229 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-border: hsl(var(--border));
+  --color-ring: hsl(var(--ring));
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@utility font-display {
+  font-family: var(--font-display), sans-serif;
+}
+
+@utility font-body {
+  font-family: var(--font-body), sans-serif;
+}
+
+@utility font-mono {
+  font-family: var(--font-mono), monospace;
+}
+
+@utility shadow-glow {
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+}
+
+@utility shadow-accent {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 72px var(--theme-glow);
+}
+
+:root {
+  --radius: 18px;
+  --background: 228 29% 10%;
+  --foreground: 220 29% 95%;
+  --card: 225 32% 12%;
+  --card-foreground: 220 29% 95%;
+  --primary: 355 86% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 224 45% 18%;
+  --secondary-foreground: 220 29% 95%;
+  --accent: 209 100% 60%;
+  --accent-foreground: 0 0% 100%;
+  --muted: 227 25% 16%;
+  --muted-foreground: 218 16% 70%;
+  --border: 220 24% 18%;
+  --ring: 208 100% 60%;
+  --theme-glow: rgba(37, 99, 235, 0.2);
+  --page-gradient:
+    radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.18), transparent 30%),
+    radial-gradient(circle at 80% 0%, rgba(239, 68, 68, 0.15), transparent 28%),
+    linear-gradient(160deg, rgba(4, 8, 20, 0.96), rgba(12, 20, 40, 0.92));
+}
+
+html[data-hero-theme="spiderman"] {
+  --background: 229 49% 10%;
+  --card: 228 48% 12%;
+  --primary: 355 90% 58%;
+  --accent: 214 95% 58%;
+  --secondary: 227 45% 18%;
+  --theme-glow: rgba(37, 99, 235, 0.22);
+  --page-gradient:
+    radial-gradient(circle at 15% 20%, rgba(239, 68, 68, 0.28), transparent 30%),
+    radial-gradient(circle at 80% 10%, rgba(37, 99, 235, 0.24), transparent 35%),
+    linear-gradient(140deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.94));
+}
+
+html[data-hero-theme="batman"] {
+  --background: 222 39% 6%;
+  --card: 220 24% 10%;
+  --foreground: 48 100% 94%;
+  --card-foreground: 48 100% 94%;
+  --primary: 46 96% 56%;
+  --accent: 46 96% 56%;
+  --secondary: 220 18% 14%;
+  --muted: 220 18% 12%;
+  --muted-foreground: 215 20% 72%;
+  --border: 220 12% 18%;
+  --page-gradient:
+    radial-gradient(circle at 80% 0%, rgba(234, 179, 8, 0.08), transparent 20%),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.98), rgba(8, 10, 14, 0.98));
+  --theme-glow: rgba(234, 179, 8, 0.12);
+}
+
+html[data-hero-theme="superman"] {
+  --background: 218 61% 11%;
+  --card: 216 65% 14%;
+  --primary: 356 89% 59%;
+  --accent: 214 100% 61%;
+  --secondary: 217 53% 18%;
+  --page-gradient:
+    radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.2), transparent 26%),
+    radial-gradient(circle at 0% 100%, rgba(239, 68, 68, 0.2), transparent 30%),
+    linear-gradient(160deg, rgba(15, 23, 42, 1), rgba(29, 78, 216, 0.45));
+  --theme-glow: rgba(239, 68, 68, 0.16);
+}
+
+html[data-hero-theme="ironman"] {
+  --background: 18 49% 8%;
+  --card: 15 40% 11%;
+  --primary: 44 96% 53%;
+  --accent: 14 92% 58%;
+  --secondary: 16 33% 17%;
+  --page-gradient:
+    radial-gradient(circle at 70% 10%, rgba(245, 158, 11, 0.25), transparent 24%),
+    radial-gradient(circle at 15% 20%, rgba(239, 68, 68, 0.18), transparent 22%),
+    linear-gradient(160deg, rgba(35, 10, 5, 0.98), rgba(72, 21, 12, 0.96));
+  --theme-glow: rgba(245, 158, 11, 0.18);
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--page-gradient);
+  color: hsl(var(--foreground));
+  font-family: var(--font-body), sans-serif;
+  transition:
+    background 300ms ease,
+    color 300ms ease;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.06), transparent 50%);
+  opacity: 0.8;
+}
+
+.panel-surface {
+  @apply relative overflow-hidden rounded-[24px] border border-white/10 bg-white/5 backdrop-blur-2xl;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.35);
+}
+
+.panel-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 28%);
+  opacity: 0.7;
+}
+
+.hero-pattern {
+  position: relative;
+}
+
+.hero-pattern::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-size: 28px 28px;
+}
+
+html[data-hero-theme="spiderman"] .hero-pattern::before {
+  background-image:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.4) 1.5px, transparent 2px),
+    linear-gradient(45deg, transparent 47%, rgba(255, 255, 255, 0.15) 48%, transparent 52%),
+    linear-gradient(-45deg, transparent 47%, rgba(255, 255, 255, 0.15) 48%, transparent 52%);
+}
+
+html[data-hero-theme="batman"] .hero-pattern::before {
+  background-image:
+    linear-gradient(to right, rgba(234, 179, 8, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(234, 179, 8, 0.08) 1px, transparent 1px);
+}
+
+html[data-hero-theme="superman"] .hero-pattern::before {
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 55%),
+    linear-gradient(0deg, rgba(96, 165, 250, 0.06), transparent 70%);
+}
+
+html[data-hero-theme="ironman"] .hero-pattern::before {
+  background-image:
+    linear-gradient(to right, rgba(245, 158, 11, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(245, 158, 11, 0.12) 1px, transparent 1px),
+    radial-gradient(circle at center, rgba(245, 158, 11, 0.18) 1px, transparent 1px);
+}
+
+.metric-label {
+  @apply text-[10px] uppercase tracking-[0.28em] text-muted-foreground;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+
+  50% {
+    box-shadow: 0 0 30px var(--theme-glow);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
