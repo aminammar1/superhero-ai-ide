@@ -6,8 +6,8 @@ import { OnboardingFlow } from "@/features/auth/onboarding";
 import { useAppStore } from "@/store/app-store";
 
 export default function HomePage() {
-  const sessionStatus = useAppStore((state) => state.sessionStatus);
-  const profile = useAppStore((state) => state.profile);
+  const sessionStatus = useAppStore((s) => s.sessionStatus);
+  const profile = useAppStore((s) => s.profile);
 
   if (sessionStatus !== "authenticated") {
     return <FaceLogin />;

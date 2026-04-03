@@ -6,6 +6,16 @@ ENV PYTHONPATH=/app/backend
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nodejs \
+    npm \
+    golang \
+    gcc \
+    g++ \
+    default-jdk \
+    && npm install -g tsx \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 

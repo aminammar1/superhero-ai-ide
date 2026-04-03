@@ -1,45 +1,95 @@
 # SuperHero AI IDE
 
-A production-ready prototype that combines a Next.js App Router frontend with a FastAPI microservice backend for:
+A futuristic AI-powered code editor with superhero-themed personas, voice interaction, and sandboxed code execution.
 
-- Face ID login
-- Superhero-themed onboarding
-- Monaco-based coding workspace
-- Streaming chat and voice-to-code
-- ElevenLabs text-to-speech integration
-- Docker-backed code execution
+---
 
-## Frontend stack
+## Stack
 
-- Next.js App Router
-- TypeScript
-- Tailwind CSS
-- shadcn-style Radix UI primitives
-- Zustand
-- Axios
-- Framer Motion
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16, TypeScript, Tailwind CSS v4, Framer Motion |
+| Editor | Monaco Editor |
+| State | Zustand (persisted) |
+| HTTP | Axios |
+| Backend | FastAPI (microservices) |
+| AI - Code | NVIDIA tiiuae/falcon3-7b-instruct |
+| AI - Chat | OpenRouter qwen/qwen3.6-plus:free |
+| Voice | ElevenLabs text-to-speech |
+| Auth | Face ID (webcam biometric) |
+| Execution | Docker sandbox (Go, Python, JS, TS, Java, C, C++) |
 
-## Backend services
+## Architecture
 
-- `gateway`: routes and aggregates downstream services
-- `auth`: face login simulation plus onboarding profile persistence
-- `ai`: chat and code generation with provider fallback logic
-- `voice`: ElevenLabs TTS proxy
-- `executor`: Docker sandbox execution with a mock mode fallback
-
-## Run locally
-
-```bash
-make dev-local
+```
+Frontend (Next.js)
+    |
+API Gateway (:8000)
+    |
+ +--+--+--+--+
+ |  |  |  |  |
+Auth AI Voice Executor
+:8001 :8002 :8003 :8004
 ```
 
-Or launch the whole stack with Docker:
+## Features
+
+- **Face ID authentication** with webcam biometric scan
+- **4 hero themes** - Spider-Man, Batman, Superman, Iron Man
+- **AI agent panel** with 3D hero avatar and voice responses
+- **Smart routing** - chat questions get voice replies, code requests generate and insert code
+- **Monaco editor** with syntax highlighting for 7 languages
+- **Docker sandbox** for secure code execution
+- **Voice input** via browser speech recognition
+- **Voice output** via ElevenLabs with hero-specific voices
+- **Settings panel** with theme switching, voice toggle, profile management
+
+## Quick Start
 
 ```bash
+# Install dependencies
+make install
+
+# Run frontend only
+make frontend
+
+# Run backend microservices locally
+make backend
+
+# Run everything with Docker
 make dev
 ```
 
-The Make targets are cross-platform:
+## Environment
 
-- Windows uses `py` and the PowerShell launcher script.
-- macOS and Linux use `python3` and the Bash launcher script.
+Copy `.env.example` to `.env` and fill in your API keys:
+
+- `NVIDIA_AI_API_KEY` - NVIDIA AI endpoint key
+- `OPENROUTER_API_KEY` - OpenRouter API key
+- `ELVEN_LABS_API_KEY` - ElevenLabs API key
+
+## Project Structure
+
+```
+app/                    Next.js app directory (pages, layout, globals)
+components/
+  agent/                AI agent panel, avatar, chat bubbles
+  ide/                  Code editor, terminal output
+  layout/               App shell, top bar, status bar, settings
+  ui/                   Reusable primitives (button, input, card, etc.)
+features/
+  agent/                Speech recognition hook
+  auth/                 Face login, onboarding flow
+  editor/               Language templates
+services/               Axios HTTP client, API functions
+store/                  Zustand store
+themes/                 Hero theme definitions
+backend/
+  gateway/              API gateway (FastAPI)
+  services/
+    auth/               Face ID auth + JWT
+    ai/                 Code generation + chat streaming
+    voice/              ElevenLabs TTS proxy
+    executor/           Docker sandbox runner
+  common/               Shared config, security utils
+```

@@ -1,9 +1,9 @@
 from typing import Annotated, AsyncIterator
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from common.config import get_settings
 
@@ -129,8 +129,10 @@ async def chat_stream(
 async def voice_tts(
     payload: dict, authorization: Annotated[str | None, Header()] = None
 ):
+    """Proxy TTS to voice service with streaming."""
+    headers = {"Authorization": authorization} if authorization else {}
+
     async def streamer() -> AsyncIterator[bytes]:
-        headers = {"Authorization": authorization} if authorization else {}
         async with httpx.AsyncClient(timeout=180.0) as client:
             async with client.stream(
                 "POST",
@@ -145,3 +147,24 @@ async def voice_tts(
                     yield chunk
 
     return StreamingResponse(streamer(), media_type="audio/mpeg")
+
+
+@app.post("/api/voice/stt")
+async def proxy_voice_stt(request: Request):
+    """Proxy STT to voice service."""
+    form = await request.form()
+    file = form.get("file")
+    if not file:
+        raise HTTPException(status_code=400, detail="Missing audio file")
+
+    file_content = await file.read()
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        files = {"file": (file.filename, file_content, file.content_type)}
+        response = await client.post(
+            f"{settings.voice_service_url}/stt",
+            files=files,
+        )
+        if response.is_error:
+            raise HTTPException(response.status_code, response.text)
+
+        return response.json()

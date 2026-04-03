@@ -1,20 +1,9 @@
 "use client";
 
-import { Play, Sparkles } from "lucide-react";
-import { motion } from "framer-motion";
+import { Play, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { CodeEditor } from "@/components/ide/code-editor";
+import { TerminalOutput } from "@/components/ide/terminal-output";
 import { runCode } from "@/services/api";
 import { useAppStore } from "@/store/app-store";
 import type { Language } from "@/lib/types";
@@ -26,106 +15,80 @@ const languages: Array<{ label: string; value: Language }> = [
   { label: "Go", value: "go" },
   { label: "Java", value: "java" },
   { label: "C", value: "c" },
-  { label: "C++", value: "cpp" }
+  { label: "C++", value: "cpp" },
 ];
 
 export function EditorPanel() {
-  const language = useAppStore((state) => state.language);
-  const code = useAppStore((state) => state.code);
-  const output = useAppStore((state) => state.output);
-  const isRunningCode = useAppStore((state) => state.isRunningCode);
-  const setLanguage = useAppStore((state) => state.setLanguage);
-  const setCode = useAppStore((state) => state.setCode);
-  const setOutput = useAppStore((state) => state.setOutput);
-  const setRunningCode = useAppStore((state) => state.setRunningCode);
+  const language = useAppStore((s) => s.language);
+  const code = useAppStore((s) => s.code);
+  const isRunningCode = useAppStore((s) => s.isRunningCode);
+  const setLanguage = useAppStore((s) => s.setLanguage);
+  const setCode = useAppStore((s) => s.setCode);
+  const setOutput = useAppStore((s) => s.setOutput);
+  const setRunningCode = useAppStore((s) => s.setRunningCode);
 
   const handleRun = async () => {
     setRunningCode(true);
     try {
       const result = await runCode({ language, code });
       setOutput(result);
-      toast.success(`Execution finished with exit code ${result.exit_code}.`);
+      if (result.exit_code === 0) {
+        toast.success("Execution complete.");
+      } else {
+        toast.error(`Process exited with code ${result.exit_code}.`);
+      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Code execution failed.");
+      toast.error(
+        error instanceof Error ? error.message : "Execution failed."
+      );
     } finally {
       setRunningCode(false);
     }
   };
 
   return (
-    <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex min-h-[70vh] flex-col gap-5">
-      <Card className="hero-pattern flex-1">
-        <CardHeader className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <Badge variant="accent">Code Editor</Badge>
-            <CardTitle className="mt-3 text-3xl">Sandbox workspace</CardTitle>
-            <CardDescription>
-              Monaco editor with multi-language execution routed through the FastAPI gateway.
-            </CardDescription>
-          </div>
+    <div className="flex h-full flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-white/[0.06] bg-black/30 px-3">
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value as Language)}
+          className="h-7 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-xs text-white/70 outline-none focus:border-primary/30"
+        >
+          {languages.map((lang) => (
+            <option
+              key={lang.value}
+              value={lang.value}
+              className="bg-slate-900"
+            >
+              {lang.label}
+            </option>
+          ))}
+        </select>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="min-w-[180px]">
-              <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select language" />
-                </SelectTrigger>
-                <SelectContent>
-                  {languages.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button variant="secondary">
-              <Sparkles className="h-4 w-4" />
-              Voice-to-code ready
-            </Button>
-            <Button onClick={handleRun} disabled={isRunningCode}>
-              <Play className="h-4 w-4" />
-              {isRunningCode ? "Running..." : "Run sandbox"}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-5 xl:grid-cols-[1.2fr_0.55fr]">
-          <div className="overflow-hidden rounded-[22px] border border-white/10 bg-slate-950/80">
-            <div className="h-[560px]">
-              <CodeEditor language={language} value={code} onChange={setCode} />
-            </div>
-          </div>
+        <div className="flex-1" />
 
-          <div className="space-y-5">
-            <div className="rounded-[22px] border border-white/10 bg-white/5 p-5">
-              <p className="metric-label">Execution status</p>
-              <p className="mt-3 font-display text-2xl">
-                {isRunningCode ? "Sandbox running" : output ? "Last run completed" : "Ready"}
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Use the hero agent to generate starter code, then execute it in the isolated runtime.
-              </p>
-            </div>
+        <button
+          type="button"
+          onClick={() => void handleRun()}
+          disabled={isRunningCode}
+          className="flex h-7 items-center gap-1.5 rounded-md bg-emerald-600/80 px-3 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-40"
+        >
+          {isRunningCode ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
+          {isRunningCode ? "Running" : "Run"}
+        </button>
+      </div>
 
-            <div className="rounded-[22px] border border-white/10 bg-slate-950/70 p-5">
-              <div className="flex items-center justify-between">
-                <p className="metric-label">Console output</p>
-                {output ? (
-                  <Badge variant={output.exit_code === 0 ? "accent" : "default"}>
-                    exit {output.exit_code}
-                  </Badge>
-                ) : null}
-              </div>
-              <Separator className="my-4" />
-              <pre className="scrollbar-thin max-h-[330px] overflow-auto whitespace-pre-wrap text-sm text-slate-200">
-                {output
-                  ? [output.stdout, output.stderr].filter(Boolean).join("\n\n") || "Program completed with no console output."
-                  : "Run your code to see stdout and stderr here."}
-              </pre>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.section>
+      <div className="min-h-0 flex-1">
+        <CodeEditor language={language} value={code} onChange={setCode} />
+      </div>
+
+      <div className="h-[200px] shrink-0">
+        <TerminalOutput />
+      </div>
+    </div>
   );
 }

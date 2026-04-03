@@ -6,7 +6,8 @@ export type Language =
   | "go"
   | "java"
   | "c"
-  | "cpp";
+  | "cpp"
+  | "bash";
 
 export type ChatRole = "user" | "assistant" | "system";
 

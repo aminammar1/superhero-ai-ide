@@ -1,11 +1,11 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { ChatMessage, HeroTheme } from "@/lib/types";
 import { heroThemeMap } from "@/themes/superheroes";
+import Image from "next/image";
 
 export function ChatMessageBubble({
   message,
-  theme
+  theme,
 }: {
   message: ChatMessage;
   theme: HeroTheme;
@@ -14,21 +14,37 @@ export function ChatMessageBubble({
   const isAssistant = message.role === "assistant";
 
   return (
-    <div className={cn("flex gap-3", !isAssistant && "justify-end")}>
-      {isAssistant ? (
-        <Avatar className="border border-white/10">
-          <AvatarImage src={hero.asset} alt={hero.name} />
-          <AvatarFallback>{hero.name.slice(0, 1)}</AvatarFallback>
-        </Avatar>
-      ) : null}
+    <div className={cn("flex gap-2.5", !isAssistant && "justify-end")}>
+      {isAssistant && (
+        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/[0.08]">
+          <Image
+            src={hero.asset}
+            alt={hero.name}
+            fill
+            className="object-cover"
+          />
+        </div>
+      )}
 
       <div
         className={cn(
-          "max-w-[85%] rounded-[22px] px-4 py-3 text-sm leading-6",
-          isAssistant ? "border border-white/10 bg-white/5" : "bg-primary text-primary-foreground"
+          "max-w-[82%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed",
+          isAssistant
+            ? "border border-white/[0.06] bg-white/[0.03] text-white/80"
+            : "bg-primary/80 text-white"
         )}
       >
-        {message.content || "Thinking..."}
+        {message.content || (
+          <span className="inline-flex gap-1 text-white/30">
+            <span className="animate-pulse">.</span>
+            <span className="animate-pulse" style={{ animationDelay: "150ms" }}>
+              .
+            </span>
+            <span className="animate-pulse" style={{ animationDelay: "300ms" }}>
+              .
+            </span>
+          </span>
+        )}
       </div>
     </div>
   );

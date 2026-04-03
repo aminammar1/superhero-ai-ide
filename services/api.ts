@@ -43,10 +43,22 @@ export async function requestTextToSpeech(payload: {
   text: string;
   heroTheme: HeroTheme;
 }) {
-  const response = await http.post("/api/voice/tts", payload, {
-    responseType: "blob"
+  const token = useAppStore.getState().token;
+  const response = await fetch(`${baseURL}/api/voice/tts`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
   });
-  return response.data as Blob;
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(errText || `TTS failed with status ${response.status}`);
+  }
+
+  return await response.blob();
 }
 
 export async function streamChat(

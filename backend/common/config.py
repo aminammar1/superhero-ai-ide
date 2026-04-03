@@ -1,12 +1,17 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# .env lives at the project root, one level above backend/
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_ENV_FILE = _PROJECT_ROOT / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE) if _ENV_FILE.exists() else ".env",
         extra="ignore",
         case_sensitive=False,
     )
@@ -41,14 +46,18 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("ELEVENLABS_API_KEY", "ELVEN_LABS_API_KEY"),
     )
+    assemblyai_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ASSEMBLYAI_API_KEY"),
+    )
 
-    voice_spiderman_id: str = "hero_spiderman"
-    voice_batman_id: str = "hero_batman"
-    voice_superman_id: str = "hero_superman"
-    voice_ironman_id: str = "hero_ironman"
+    voice_spiderman_id: str = "ErXwobaYiN019PkySvjV"
+    voice_batman_id: str = "VR6AewLTigWG4xSOukaG"
+    voice_superman_id: str = "pNInz6obpgDQGcFmaJgB"
+    voice_ironman_id: str = "TxGEqnHWrfWFTfGW9XjX"
 
     enable_docker_sandbox: bool = False
-    docker_timeout_seconds: int = 20
+    docker_timeout_seconds: int = 30
 
 
 @lru_cache

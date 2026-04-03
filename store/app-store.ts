@@ -12,6 +12,7 @@ import type {
 import { languageTemplates } from "@/features/editor/templates";
 
 type SessionStatus = "anonymous" | "loading" | "authenticated";
+export type VoiceMode = "voice-voice" | "text-text";
 
 interface AppState {
   sessionStatus: SessionStatus;
@@ -24,6 +25,7 @@ interface AppState {
   isRunningCode: boolean;
   isStreamingChat: boolean;
   voiceEnabled: boolean;
+  voiceMode: VoiceMode;
   isListening: boolean;
   transcript: string;
   messages: ChatMessage[];
@@ -38,6 +40,7 @@ interface AppState {
   setRunningCode: (running: boolean) => void;
   setStreamingChat: (streaming: boolean) => void;
   setVoiceEnabled: (enabled: boolean) => void;
+  setVoiceMode: (mode: VoiceMode) => void;
   setListening: (listening: boolean) => void;
   setTranscript: (transcript: string) => void;
   pushMessage: (message: ChatMessage) => void;
@@ -66,6 +69,7 @@ export const useAppStore = create<AppState>()(
       isRunningCode: false,
       isStreamingChat: false,
       voiceEnabled: true,
+      voiceMode: "text-text",
       isListening: false,
       transcript: "",
       messages: [],
@@ -107,6 +111,7 @@ export const useAppStore = create<AppState>()(
       setRunningCode: (running) => set({ isRunningCode: running }),
       setStreamingChat: (streaming) => set({ isStreamingChat: streaming }),
       setVoiceEnabled: (enabled) => set({ voiceEnabled: enabled }),
+      setVoiceMode: (mode) => set({ voiceMode: mode }),
       setListening: (listening) => set({ isListening: listening }),
       setTranscript: (transcript) => set({ transcript }),
       pushMessage: (message) =>

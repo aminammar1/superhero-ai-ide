@@ -32,14 +32,6 @@
   font-family: var(--font-mono), monospace;
 }
 
-@utility shadow-glow {
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
-}
-
-@utility shadow-accent {
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 72px var(--theme-glow);
-}
-
 :root {
   --radius: 18px;
   --background: 228 29% 10%;
@@ -57,10 +49,7 @@
   --border: 220 24% 18%;
   --ring: 208 100% 60%;
   --theme-glow: rgba(37, 99, 235, 0.2);
-  --page-gradient:
-    radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.18), transparent 30%),
-    radial-gradient(circle at 80% 0%, rgba(239, 68, 68, 0.15), transparent 28%),
-    linear-gradient(160deg, rgba(4, 8, 20, 0.96), rgba(12, 20, 40, 0.92));
+  --theme-primary-raw: 239, 68, 68;
 }
 
 html[data-hero-theme="spiderman"] {
@@ -70,10 +59,7 @@ html[data-hero-theme="spiderman"] {
   --accent: 214 95% 58%;
   --secondary: 227 45% 18%;
   --theme-glow: rgba(37, 99, 235, 0.22);
-  --page-gradient:
-    radial-gradient(circle at 15% 20%, rgba(239, 68, 68, 0.28), transparent 30%),
-    radial-gradient(circle at 80% 10%, rgba(37, 99, 235, 0.24), transparent 35%),
-    linear-gradient(140deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.94));
+  --theme-primary-raw: 239, 68, 68;
 }
 
 html[data-hero-theme="batman"] {
@@ -87,10 +73,8 @@ html[data-hero-theme="batman"] {
   --muted: 220 18% 12%;
   --muted-foreground: 215 20% 72%;
   --border: 220 12% 18%;
-  --page-gradient:
-    radial-gradient(circle at 80% 0%, rgba(234, 179, 8, 0.08), transparent 20%),
-    linear-gradient(180deg, rgba(2, 6, 23, 0.98), rgba(8, 10, 14, 0.98));
   --theme-glow: rgba(234, 179, 8, 0.12);
+  --theme-primary-raw: 234, 179, 8;
 }
 
 html[data-hero-theme="superman"] {
@@ -99,11 +83,8 @@ html[data-hero-theme="superman"] {
   --primary: 356 89% 59%;
   --accent: 214 100% 61%;
   --secondary: 217 53% 18%;
-  --page-gradient:
-    radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.2), transparent 26%),
-    radial-gradient(circle at 0% 100%, rgba(239, 68, 68, 0.2), transparent 30%),
-    linear-gradient(160deg, rgba(15, 23, 42, 1), rgba(29, 78, 216, 0.45));
   --theme-glow: rgba(239, 68, 68, 0.16);
+  --theme-primary-raw: 96, 165, 250;
 }
 
 html[data-hero-theme="ironman"] {
@@ -112,11 +93,8 @@ html[data-hero-theme="ironman"] {
   --primary: 44 96% 53%;
   --accent: 14 92% 58%;
   --secondary: 16 33% 17%;
-  --page-gradient:
-    radial-gradient(circle at 70% 10%, rgba(245, 158, 11, 0.25), transparent 24%),
-    radial-gradient(circle at 15% 20%, rgba(239, 68, 68, 0.18), transparent 22%),
-    linear-gradient(160deg, rgba(35, 10, 5, 0.98), rgba(72, 21, 12, 0.96));
   --theme-glow: rgba(245, 158, 11, 0.18);
+  --theme-primary-raw: 245, 158, 11;
 }
 
 * {
@@ -129,101 +107,87 @@ html {
 
 body {
   min-height: 100vh;
-  background: var(--page-gradient);
+  background: #030308;
   color: hsl(var(--foreground));
   font-family: var(--font-body), sans-serif;
-  transition:
-    background 300ms ease,
-    color 300ms ease;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.06), transparent 50%);
-  opacity: 0.8;
-}
-
-.panel-surface {
-  @apply relative overflow-hidden rounded-[24px] border border-white/10 bg-white/5 backdrop-blur-2xl;
-  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.35);
-}
-
-.panel-surface::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 28%);
-  opacity: 0.7;
-}
-
-.hero-pattern {
-  position: relative;
-}
-
-.hero-pattern::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.18;
-  background-size: 28px 28px;
-}
-
-html[data-hero-theme="spiderman"] .hero-pattern::before {
-  background-image:
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.4) 1.5px, transparent 2px),
-    linear-gradient(45deg, transparent 47%, rgba(255, 255, 255, 0.15) 48%, transparent 52%),
-    linear-gradient(-45deg, transparent 47%, rgba(255, 255, 255, 0.15) 48%, transparent 52%);
-}
-
-html[data-hero-theme="batman"] .hero-pattern::before {
-  background-image:
-    linear-gradient(to right, rgba(234, 179, 8, 0.08) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(234, 179, 8, 0.08) 1px, transparent 1px);
-}
-
-html[data-hero-theme="superman"] .hero-pattern::before {
-  background-image:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 55%),
-    linear-gradient(0deg, rgba(96, 165, 250, 0.06), transparent 70%);
-}
-
-html[data-hero-theme="ironman"] .hero-pattern::before {
-  background-image:
-    linear-gradient(to right, rgba(245, 158, 11, 0.12) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(245, 158, 11, 0.12) 1px, transparent 1px),
-    radial-gradient(circle at center, rgba(245, 158, 11, 0.18) 1px, transparent 1px);
-}
-
-.metric-label {
-  @apply text-[10px] uppercase tracking-[0.28em] text-muted-foreground;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 9999px;
 }
 
-@keyframes pulse-glow {
-
-  0%,
-  100% {
-    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
-  }
-
-  50% {
-    box-shadow: 0 0 30px var(--theme-glow);
-  }
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.animate-pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
+@keyframes scan-sweep {
+  0% { transform: translateY(-130px); }
+  50% { transform: translateY(130px); }
+  100% { transform: translateY(-130px); }
+}
+
+@keyframes ring-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes glow-breathe {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.04); }
+}
+
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
+@keyframes glow-ring-pulse {
+  0%, 100% { box-shadow: 0 0 15px var(--theme-glow); }
+  50% { box-shadow: 0 0 35px var(--theme-glow), 0 0 55px var(--theme-glow); }
+}
+
+.animate-scan-sweep {
+  animation: scan-sweep 2.5s ease-in-out infinite;
+}
+
+.animate-ring-spin {
+  animation: ring-spin 8s linear infinite;
+}
+
+.animate-glow-breathe {
+  animation: glow-breathe 2s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float-gentle 4s ease-in-out infinite;
+}
+
+.animate-glow-ring {
+  animation: glow-ring-pulse 2s ease-in-out infinite;
+}
+
+@keyframes avatar-float {
+  0%, 100% { transform: translateY(0) rotateX(0deg); }
+  50% { transform: translateY(-8px) rotateX(2deg); }
+}
+
+@keyframes avatar-tilt {
+  0%, 100% { transform: rotateY(0deg); }
+  25% { transform: rotateY(4deg); }
+  75% { transform: rotateY(-4deg); }
+}
+
+@keyframes shadow-pulse {
+  0%, 100% { opacity: 0.3; transform: translateX(-50%) scaleX(1); }
+  50% { opacity: 0.15; transform: translateX(-50%) scaleX(0.85); }
+}
+
+@keyframes face-scan-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.4); }
 }

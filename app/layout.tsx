@@ -6,30 +6,31 @@ import { Providers } from "@/app/providers";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-body"
+  variable: "--font-body",
 });
 
 const rajdhani = Rajdhani({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
-  variable: "--font-display"
+  variable: "--font-display",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-mono"
+  variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
   title: "SuperHero AI IDE",
-  description: "A futuristic multi-hero AI workspace with voice, code generation, and sandbox execution."
+  description:
+    "A futuristic multi-hero AI workspace with voice, code generation, and sandbox execution.",
 };
 
 export default function RootLayout({
-  children
+  children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning data-hero-theme="spiderman">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${spaceGrotesk.variable} ${rajdhani.variable} ${jetbrainsMono.variable} antialiased`}
       >

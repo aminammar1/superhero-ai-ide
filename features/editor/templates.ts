@@ -75,5 +75,10 @@ int main() {
     std::cout << "SuperHero AI IDE sandbox ready." << std::endl;
     return 0;
 }
+`,
+  bash: `#!/bin/bash
+
+echo "Superhero Terminal initialized."
+node -v
 `
 };

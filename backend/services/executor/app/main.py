@@ -65,7 +65,97 @@ RUNTIMES = {
             "g++ /workspace/main.cpp -std=c++17 -O2 -o /workspace/main && /workspace/main",
         ],
     },
+    "bash": {
+        "image": "node:20-alpine",
+        "filename": "script.sh",
+        "command": ["sh", "/workspace/script.sh"],
+    },
 }
+
+DIRECT_COMMANDS = {
+    "bash": lambda path: ["sh", str(path)],
+    "python": lambda path: ["python3", str(path)],
+    "javascript": lambda path: ["node", str(path)],
+    "typescript": lambda path: ["tsx", str(path)],
+    "go": lambda path: ["go", "run", str(path)],
+    "java": lambda path: [
+        "sh", "-c",
+        f"javac {path} && java -cp {path.parent} {path.stem}",
+    ],
+    "c": lambda path: [
+        "sh", "-c",
+        f"gcc {path} -o {path}.out && {path}.out",
+    ],
+    "cpp": lambda path: [
+        "sh", "-c",
+        f"g++ {path} -std=c++17 -O2 -o {path}.out && {path}.out",
+    ],
+}
+
+
+def run_direct(request: ExecuteRequest) -> dict:
+    runtime = RUNTIMES.get(request.language)
+    if not runtime:
+        return {
+            "stdout": "",
+            "stderr": f"Unsupported language: {request.language}",
+            "exit_code": 1,
+            "language": request.language,
+            "duration_ms": 0,
+        }
+
+    builder = DIRECT_COMMANDS.get(request.language)
+    if not builder:
+        return {
+            "stdout": "",
+            "stderr": (
+                f"Direct execution not available for {request.language}. "
+                "Docker sandbox required."
+            ),
+            "exit_code": 1,
+            "language": request.language,
+            "duration_ms": 0,
+        }
+
+    started = time.perf_counter()
+    with tempfile.TemporaryDirectory(prefix="hero-exec-") as workdir:
+        source_path = Path(workdir) / runtime["filename"]
+        source_path.write_text(request.code, encoding="utf-8")
+        command = builder(source_path)
+
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=settings.docker_timeout_seconds,
+                check=False,
+            )
+        except FileNotFoundError:
+            return {
+                "stdout": "",
+                "stderr": f"Runtime for {request.language} is not installed.",
+                "exit_code": 127,
+                "language": request.language,
+                "duration_ms": 0,
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "stdout": "",
+                "stderr": f"Execution timed out after {settings.docker_timeout_seconds}s.",
+                "exit_code": 124,
+                "language": request.language,
+                "duration_ms": settings.docker_timeout_seconds * 1000,
+            }
+
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    return {
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "exit_code": completed.returncode,
+        "language": request.language,
+        "duration_ms": duration_ms,
+    }
 
 
 def simulate_execution(request: ExecuteRequest) -> dict:
@@ -145,19 +235,13 @@ async def execute(request: ExecuteRequest):
 
     try:
         return run_in_docker(request)
+    except FileNotFoundError:
+        return run_direct(request)
     except subprocess.TimeoutExpired:
         return {
             "stdout": "",
-            "stderr": "Execution timed out in the Docker sandbox.",
+            "stderr": "Execution timed out.",
             "exit_code": 124,
             "language": request.language,
             "duration_ms": settings.docker_timeout_seconds * 1000,
-        }
-    except FileNotFoundError:
-        return {
-            "stdout": "",
-            "stderr": "Docker CLI was not found. Disable the sandbox or install Docker.",
-            "exit_code": 127,
-            "language": request.language,
-            "duration_ms": 0,
         }

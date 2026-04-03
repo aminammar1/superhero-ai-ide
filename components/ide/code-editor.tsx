@@ -19,7 +19,8 @@ const languageMap: Record<Language, string> = {
   go: "go",
   java: "java",
   c: "c",
-  cpp: "cpp"
+  cpp: "cpp",
+  bash: "shell"
 };
 
 export function CodeEditor({

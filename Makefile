@@ -18,7 +18,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-frontend-deps install-backend-deps dev dev-local frontend backend docker-build docker-up clean
+.PHONY: help venv install install-frontend-deps install-backend-deps dev dev-local frontend backend docker-build docker-up docker-down clean typecheck lint
 
 help:
 	@echo ""
@@ -34,6 +34,9 @@ help:
 	@echo "  make backend      Run FastAPI microservices locally"
 	@echo "  make docker-build Build Docker images"
 	@echo "  make docker-up    Start Docker services"
+	@echo "  make docker-down  Stop Docker services"
+	@echo "  make typecheck    Run TypeScript type checking"
+	@echo "  make lint         Run Next.js linting"
 	@echo "  make clean        Remove local build artifacts"
 	@echo ""
 
@@ -68,6 +71,15 @@ docker-build:
 
 docker-up:
 	docker compose up
+
+docker-down:
+	docker compose down
+
+typecheck:
+	$(NPM_CMD) run build
+
+lint:
+	$(NPM_CMD) run lint
 
 clean:
 	$(CLEAN_CMD)

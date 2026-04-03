@@ -41,7 +41,7 @@ async def openrouter_chat(messages: list[dict]) -> str:
     if not settings.openrouter_api_key:
         raise RuntimeError("OpenRouter is not configured.")
 
-    async with httpx.AsyncClient(timeout=90.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -81,15 +81,37 @@ async def nvidia_code(prompt: str) -> str:
 
 
 def local_chat_fallback(request: ChatRequest) -> str:
-    persona = THEME_PERSONAS.get(request.heroTheme, "helpful")
-    return (
-        f"As your {request.heroTheme} hero assistant, I am responding in a {persona} tone. "
-        f"You asked: {request.prompt}\n\n"
-        "Prototype guidance:\n"
-        "1. Break the request into API, UI, and execution steps.\n"
-        "2. Keep the architecture modular and observable.\n"
-        "3. Use the code generation tab if you want me to draft the implementation."
-    )
+    prompt = request.prompt.lower()
+    
+    if request.heroTheme == "spiderman":
+        if "hi" in prompt or "hello" in prompt:
+            return "Hey there! Friendly neighborhood Spider-Man swinging by. What's on your mind?"
+        if "who are you" in prompt:
+            return "I'm Spider-Man! Well, the AI version of him anyway. Ready to write some code or fight some bugs."
+        return f"Whoa, my spider-sense tells me OpenRouter AI is offline right now. I heard you say: '{request.prompt}'. Want to generate some code instead?"
+
+    if request.heroTheme == "batman":
+        if "hi" in prompt or "hello" in prompt:
+            return "We don't have time for pleasantries. What do you need?"
+        if "who are you" in prompt:
+            return "I am vengeance. I am the night. I am... your AI assistant. Let's get to work."
+        return f"The main network is compromised. Analyzing locally: '{request.prompt}'. Stick to the mission."
+
+    if request.heroTheme == "superman":
+        if "hi" in prompt or "hello" in prompt:
+            return "Hello! Superman here. It's a great day to build something new!"
+        if "who are you" in prompt:
+            return "I'm Superman, here to help you lift the heavy bugs and fly through your code."
+        return f"Looks like the main server is outside my flight path right now. But I'm still here! You mentioned: '{request.prompt}'."
+
+    if request.heroTheme == "ironman":
+        if "hi" in prompt or "hello" in prompt:
+            return "Hey. Tony Stark, genius, billionaire, playboy, philanthropist... and now your AI assistant."
+        if "who are you" in prompt:
+            return "I'm Iron Man. Well, my digital consciousness anyway. Friday is taking a break."
+        return f"OpenRouter servers are napping. Just me and my local suit AI handling this. You said: '{request.prompt}'."
+
+    return "AI connection offline."
 
 
 def local_code_fallback(request: CodeRequest) -> str:
@@ -159,7 +181,14 @@ async def chat_stream(request: ChatRequest):
             "role": "system",
             "content": (
                 "You are the AI co-pilot inside SuperHero AI IDE. "
-                f"Adopt a {THEME_PERSONAS.get(request.heroTheme, 'helpful')} tone."
+                f"Adopt a {THEME_PERSONAS.get(request.heroTheme, 'helpful')} tone. "
+                "RULES: Keep replies SHORT (2-3 sentences max). "
+                "Do NOT output code blocks directly. "
+                "AGENTIC SKILLS: You can manipulate the user's files by adding these exact tags at the end of your message: "
+                "[CREATE: <filename>] - to create a new file, "
+                "[DELETE: <filename>] - to delete an existing file, "
+                "[EDIT: <filename>] - to select and prepare to edit a file. "
+                "If the user asks you to write code, ALWAYS use [CREATE: <filename>] first so the file is created for them, then tell them to say 'yes' to insert the code."
             ),
         }
     ]
@@ -174,6 +203,6 @@ async def chat_stream(request: ChatRequest):
     async def streamer() -> AsyncIterator[str]:
         for chunk in final_text.split():
             yield f"{chunk} "
-            await asyncio.sleep(0.015)
+            await asyncio.sleep(0.008)
 
     return StreamingResponse(streamer(), media_type="text/plain")

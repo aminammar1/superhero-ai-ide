@@ -6,7 +6,7 @@ import { Toaster } from "sonner";
 import { useAppStore } from "@/store/app-store";
 
 export function Providers({ children }: { children: ReactNode }) {
-  const theme = useAppStore((state) => state.theme);
+  const theme = useAppStore((s) => s.theme);
 
   useEffect(() => {
     document.documentElement.dataset.heroTheme = theme;
@@ -19,7 +19,7 @@ export function Providers({ children }: { children: ReactNode }) {
         position="top-right"
         toastOptions={{
           className:
-            "border border-white/10 bg-slate-950/90 text-slate-50 backdrop-blur-xl"
+            "border border-white/[0.06] bg-[#0c0c14]/95 text-white/80 backdrop-blur-xl text-sm",
         }}
       />
     </>
