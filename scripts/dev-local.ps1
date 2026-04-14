@@ -5,7 +5,7 @@ $backendProcess = $null
 $frontendProcess = $null
 
 try {
-    $venvPython = Join-Path $root ".venv\Scripts\python.exe"
+    $venvPython = Join-Path $root "backend\.venv\Scripts\python.exe"
     if (-not (Test-Path $venvPython)) {
         throw "Missing virtual environment Python at $venvPython. Run 'make install' (or 'make venv' then 'make install-backend-deps') first."
     }
@@ -21,7 +21,7 @@ try {
     Write-Host "Starting frontend..." -ForegroundColor Cyan
     $frontendProcess = Start-Process -FilePath "npm.cmd" `
         -ArgumentList "run", "dev" `
-        -WorkingDirectory $root `
+        -WorkingDirectory (Join-Path $root "frontend") `
         -PassThru
 
     Write-Host ""

@@ -12,3 +12,4 @@ venv
 .env
 .env.local
 backend/.venv
+notes.md

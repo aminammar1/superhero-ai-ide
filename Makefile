@@ -4,16 +4,16 @@ SHELL := powershell.exe
 PYTHON_CMD := py
 NPM_CMD := npm.cmd
 DEV_LOCAL_CMD := powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-local.ps1
-CLEAN_CMD := if (Test-Path .next) { Remove-Item -Recurse -Force .next }; if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
-VENV_PYTHON := .venv\\Scripts\\python.exe
+CLEAN_CMD := if (Test-Path frontend/.next) { Remove-Item -Recurse -Force frontend/.next }; if (Test-Path frontend/node_modules) { Remove-Item -Recurse -Force frontend/node_modules }
+VENV_PYTHON := backend\\.venv\\Scripts\\python.exe
 else
 SHELL := /bin/bash
 .SHELLFLAGS := -lc
 PYTHON_CMD := python3
 NPM_CMD := npm
 DEV_LOCAL_CMD := bash scripts/dev-local.sh
-CLEAN_CMD := rm -rf .next node_modules
-VENV_PYTHON := .venv/bin/python
+CLEAN_CMD := rm -rf frontend/.next frontend/node_modules
+VENV_PYTHON := backend/.venv/bin/python
 endif
 
 .DEFAULT_GOAL := help
@@ -24,7 +24,7 @@ help:
 	@echo ""
 	@echo "SuperHero AI IDE commands:"
 	@echo "  make help         Show available commands"
-	@echo "  make venv         Create Python virtual environment (.venv)"
+	@echo "  make venv         Create Python virtual environment (backend/.venv)"
 	@echo "  make install      Install all project dependencies"
 	@echo "  make install-frontend-deps Install frontend dependencies"
 	@echo "  make install-backend-deps  Install backend dependencies"
@@ -42,12 +42,12 @@ help:
 
 
 venv:
-	$(PYTHON_CMD) -m venv .venv
+	$(PYTHON_CMD) -m venv backend/.venv
 
 install: install-frontend-deps install-backend-deps
 
 install-frontend-deps:
-	$(NPM_CMD) install
+	cd frontend && $(NPM_CMD) install
 
 install-backend-deps: venv
 	$(VENV_PYTHON) -m pip install --upgrade pip
@@ -60,8 +60,8 @@ dev-local: venv
 	$(DEV_LOCAL_CMD)
 
 frontend:
-	$(NPM_CMD) install
-	$(NPM_CMD) run dev
+	cd frontend && $(NPM_CMD) install
+	cd frontend && $(NPM_CMD) run dev
 
 backend: venv
 	$(VENV_PYTHON) backend/dev.py
@@ -76,10 +76,10 @@ docker-down:
 	docker compose down
 
 typecheck:
-	$(NPM_CMD) run build
+	cd frontend && $(NPM_CMD) run build
 
 lint:
-	$(NPM_CMD) run lint
+	cd frontend && $(NPM_CMD) run lint
 
 clean:
 	$(CLEAN_CMD)

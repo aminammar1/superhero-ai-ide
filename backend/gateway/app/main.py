@@ -107,20 +107,28 @@ async def execute_run(
 async def chat_stream(
     payload: dict, authorization: Annotated[str | None, Header()] = None
 ):
+    headers = {"Authorization": authorization} if authorization else {}
+    client = httpx.AsyncClient(timeout=120.0)
+    req = client.build_request(
+        "POST",
+        f"{settings.ai_service_url}/chat/stream",
+        json=payload,
+        headers=headers,
+    )
+    response = await client.send(req, stream=True)
+
+    if response.is_error:
+        detail = await response.aread()
+        await client.aclose()
+        raise HTTPException(response.status_code, detail.decode())
+
     async def streamer() -> AsyncIterator[bytes]:
-        headers = {"Authorization": authorization} if authorization else {}
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream(
-                "POST",
-                f"{settings.ai_service_url}/chat/stream",
-                json=payload,
-                headers=headers,
-            ) as response:
-                if response.is_error:
-                    detail = await response.aread()
-                    raise HTTPException(response.status_code, detail.decode())
-                async for chunk in response.aiter_bytes():
-                    yield chunk
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+            await client.aclose()
 
     return StreamingResponse(streamer(), media_type="text/plain")
 
@@ -132,19 +140,27 @@ async def voice_tts(
     """Proxy TTS to voice service with streaming."""
     headers = {"Authorization": authorization} if authorization else {}
 
+    client = httpx.AsyncClient(timeout=180.0)
+    req = client.build_request(
+        "POST",
+        f"{settings.voice_service_url}/tts",
+        json=payload,
+        headers=headers,
+    )
+    response = await client.send(req, stream=True)
+
+    if response.is_error:
+        detail = await response.aread()
+        await client.aclose()
+        raise HTTPException(response.status_code, detail.decode())
+
     async def streamer() -> AsyncIterator[bytes]:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            async with client.stream(
-                "POST",
-                f"{settings.voice_service_url}/tts",
-                json=payload,
-                headers=headers,
-            ) as response:
-                if response.is_error:
-                    detail = await response.aread()
-                    raise HTTPException(response.status_code, detail.decode())
-                async for chunk in response.aiter_bytes():
-                    yield chunk
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+            await client.aclose()
 
     return StreamingResponse(streamer(), media_type="audio/mpeg")
 
@@ -168,3 +184,66 @@ async def proxy_voice_stt(request: Request):
             raise HTTPException(response.status_code, response.text)
 
         return response.json()
+
+
+# ═══════════════════════════════════════════════
+#   WORKSPACE FILESYSTEM PROXY
+# ═══════════════════════════════════════════════
+
+@app.post("/api/workspace/write")
+async def workspace_write(payload: dict):
+    return await request_json(
+        "POST",
+        f"{settings.executor_service_url}/workspace/write",
+        payload=payload,
+    )
+
+
+@app.get("/api/workspace/read")
+async def workspace_read(path: str):
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{settings.executor_service_url}/workspace/read",
+            params={"path": path},
+        )
+    if response.is_error:
+        raise HTTPException(response.status_code, response.text)
+    return JSONResponse(content=response.json())
+
+
+@app.get("/api/workspace/list")
+async def workspace_list(path: str = ""):
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{settings.executor_service_url}/workspace/list",
+            params={"path": path},
+        )
+    if response.is_error:
+        raise HTTPException(response.status_code, response.text)
+    return JSONResponse(content=response.json())
+
+
+@app.delete("/api/workspace/delete")
+async def workspace_delete(path: str):
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.request(
+            "DELETE",
+            f"{settings.executor_service_url}/workspace/delete",
+            params={"path": path},
+        )
+    if response.is_error:
+        raise HTTPException(response.status_code, response.text)
+    return JSONResponse(content=response.json())
+
+
+@app.post("/api/workspace/shell")
+async def workspace_shell(payload: dict):
+    """Shell commands need a longer timeout (npm install etc.)."""
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        response = await client.post(
+            f"{settings.executor_service_url}/workspace/shell",
+            json=payload,
+        )
+    if response.is_error:
+        raise HTTPException(response.status_code, response.text)
+    return JSONResponse(content=response.json())

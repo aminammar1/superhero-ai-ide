@@ -40,30 +40,39 @@ async def tts(request: TTSRequest):
 
     voice_id = VOICE_MAP.get(request.heroTheme) or settings.voice_spiderman_id
 
+    client = httpx.AsyncClient(timeout=180.0)
+    req = client.build_request(
+        "POST",
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream",
+        headers={
+            "xi-api-key": settings.elevenlabs_api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        },
+        json={
+            "text": request.text,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability": 0.45,
+                "similarity_boost": 0.8,
+            },
+        },
+    )
+    
+    response = await client.send(req, stream=True)
+    
+    if response.is_error:
+        detail = await response.aread()
+        await client.aclose()
+        raise HTTPException(response.status_code, detail.decode())
+
     async def streamer() -> AsyncIterator[bytes]:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            async with client.stream(
-                "POST",
-                f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream",
-                headers={
-                    "xi-api-key": settings.elevenlabs_api_key,
-                    "Content-Type": "application/json",
-                    "Accept": "audio/mpeg",
-                },
-                json={
-                    "text": request.text,
-                    "model_id": "eleven_multilingual_v2",
-                    "voice_settings": {
-                        "stability": 0.45,
-                        "similarity_boost": 0.8,
-                    },
-                },
-            ) as response:
-                if response.is_error:
-                    detail = await response.aread()
-                    raise HTTPException(response.status_code, detail.decode())
-                async for chunk in response.aiter_bytes():
-                    yield chunk
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+            await client.aclose()
 
     return StreamingResponse(streamer(), media_type="audio/mpeg")
 

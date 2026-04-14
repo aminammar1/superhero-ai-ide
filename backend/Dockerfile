@@ -7,13 +7,15 @@ ENV PYTHONPATH=/app/backend
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     nodejs \
     npm \
     golang \
     gcc \
     g++ \
     default-jdk \
-    && npm install -g tsx \
+    bash \
+    && npm install -g tsx typescript \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt /app/backend/requirements.txt

@@ -13,8 +13,8 @@ A futuristic AI-powered code editor with superhero-themed personas, voice intera
 | State | Zustand (persisted) |
 | HTTP | Axios |
 | Backend | FastAPI (microservices) |
-| AI - Code | NVIDIA tiiuae/falcon3-7b-instruct |
-| AI - Chat | OpenRouter qwen/qwen3.6-plus:free |
+| AI - Code | NVIDIA nvidia/tiiuae/falcon3-7b-instruct + OpenRouter fallback chain |
+| AI - Chat | OpenRouter free model chain + NVIDIA fallback |
 | Voice | ElevenLabs text-to-speech |
 | Auth | Face ID (webcam biometric) |
 | Execution | Docker sandbox (Go, Python, JS, TS, Java, C, C++) |
@@ -66,24 +66,15 @@ Copy `.env.example` to `.env` and fill in your API keys:
 
 - `NVIDIA_AI_API_KEY` - NVIDIA AI endpoint key
 - `OPENROUTER_API_KEY` - OpenRouter API key
+- `OPENROUTER_CHAT_MODELS` - comma-separated chat fallback models
+- `OPENROUTER_CODE_MODELS` - comma-separated code fallback models
+- `NVIDIA_CHAT_MODELS` - comma-separated NVIDIA chat fallback models
+- `NVIDIA_CODE_MODELS` - comma-separated NVIDIA code fallback models
 - `ELVEN_LABS_API_KEY` - ElevenLabs API key
 
 ## Project Structure
 
 ```
-app/                    Next.js app directory (pages, layout, globals)
-components/
-  agent/                AI agent panel, avatar, chat bubbles
-  ide/                  Code editor, terminal output
-  layout/               App shell, top bar, status bar, settings
-  ui/                   Reusable primitives (button, input, card, etc.)
-features/
-  agent/                Speech recognition hook
-  auth/                 Face login, onboarding flow
-  editor/               Language templates
-services/               Axios HTTP client, API functions
-store/                  Zustand store
-themes/                 Hero theme definitions
 backend/
   gateway/              API gateway (FastAPI)
   services/
@@ -92,4 +83,18 @@ backend/
     voice/              ElevenLabs TTS proxy
     executor/           Docker sandbox runner
   common/               Shared config, security utils
+frontend/
+  app/                  Next.js app directory (pages, layout, globals)
+  components/
+    agent/              AI agent panel, avatar, chat bubbles
+    ide/                Code editor, terminal output
+    layout/             App shell, top bar, status bar, settings
+    ui/                 Reusable primitives (button, input, card, etc.)
+  features/
+    agent/              Speech recognition hook
+    auth/               Face login, onboarding flow
+    editor/             Language templates
+  services/             Axios HTTP client, API functions
+  store/                Zustand store
+  themes/               Hero theme definitions
 ```

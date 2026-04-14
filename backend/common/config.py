@@ -34,6 +34,14 @@ class Settings(BaseSettings):
         default="nvidia/tiiuae/falcon3-7b-instruct",
         validation_alias=AliasChoices("NVIDIA_AI_MODEL", "NVIDIA_MODEL"),
     )
+    nvidia_chat_models: str = Field(
+        default="nvidia/tiiuae/falcon3-7b-instruct",
+        validation_alias=AliasChoices("NVIDIA_CHAT_MODELS"),
+    )
+    nvidia_code_models: str = Field(
+        default="nvidia/tiiuae/falcon3-7b-instruct",
+        validation_alias=AliasChoices("NVIDIA_CODE_MODELS"),
+    )
     openrouter_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("OPENROUTER_API_KEY"),
@@ -41,6 +49,32 @@ class Settings(BaseSettings):
     openrouter_model: str = Field(
         default="qwen/qwen3.6-plus:free",
         validation_alias=AliasChoices("OPENROUTER_MODEL", "OEPNROUTER_MODEL"),
+    )
+    openrouter_chat_models: str = Field(
+        default=(
+            "google/gemma-4-31b-it:free,"
+            "minimax/minimax-m2.5:free,"
+            "openai/gpt-oss-20b:free,"
+            "openai/gpt-oss-120b:free,"
+            "meta-llama/llama-3.3-70b-instruct:free,"
+            "nvidia/nemotron-3-nano-30b-a3b:free,"
+            "qwen/qwen3-coder:free,"
+            "deepseek/deepseek-r1:free"
+        ),
+        validation_alias=AliasChoices("OPENROUTER_CHAT_MODELS"),
+    )
+    openrouter_code_models: str = Field(
+        default=(
+            "google/gemma-4-31b-it:free,"
+            "minimax/minimax-m2.5:free,"
+            "openai/gpt-oss-20b:free,"
+            "openai/gpt-oss-120b:free,"
+            "meta-llama/llama-3.3-70b-instruct:free,"
+            "nvidia/nemotron-3-nano-30b-a3b:free,"
+            "qwen/qwen3-coder:free,"
+            "deepseek/deepseek-r1:free"
+        ),
+        validation_alias=AliasChoices("OPENROUTER_CODE_MODELS"),
     )
     elevenlabs_api_key: str | None = Field(
         default=None,

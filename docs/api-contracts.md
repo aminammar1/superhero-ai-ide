@@ -55,6 +55,7 @@ Request:
 {
   "prompt": "How should we structure a FastAPI gateway?",
   "heroTheme": "ironman",
+  "model": "qwen/qwen3-coder:free",
   "history": [
     { "role": "user", "content": "Previous message" }
   ]
@@ -73,7 +74,8 @@ Request:
 {
   "prompt": "Build me a REST API in Go",
   "language": "go",
-  "heroTheme": "superman"
+  "heroTheme": "superman",
+  "model": "nvidia/tiiuae/falcon3-7b-instruct"
 }
 ```
 

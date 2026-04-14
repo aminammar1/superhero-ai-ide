@@ -1,8 +1,10 @@
 services:
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file:
+      - .env
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
@@ -15,12 +17,14 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     command: uvicorn gateway.app.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - .env
     environment:
       AUTH_SERVICE_URL: http://auth-service:8001
       AI_SERVICE_URL: http://ai-service:8002
       VOICE_SERVICE_URL: http://voice-service:8003
       EXECUTOR_SERVICE_URL: http://executor-service:8004
-      JWT_SECRET: superhero-dev-secret
+      JWT_SECRET: ${JWT_SECRET:-superhero-dev-secret}
     ports:
       - "8000:8000"
     depends_on:
@@ -34,8 +38,10 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     command: uvicorn services.auth.app.main:app --host 0.0.0.0 --port 8001
+    env_file:
+      - .env
     environment:
-      JWT_SECRET: superhero-dev-secret
+      JWT_SECRET: ${JWT_SECRET:-superhero-dev-secret}
     ports:
       - "8001:8001"
 
@@ -44,11 +50,17 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     command: uvicorn services.ai.app.main:app --host 0.0.0.0 --port 8002
+    env_file:
+      - .env
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen-2.5-coder-32b-instruct}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen3-coder:free}
+      OPENROUTER_CHAT_MODELS: ${OPENROUTER_CHAT_MODELS:-qwen/qwen3-coder:free,openai/gpt-oss-120b:free,qwen/qwen3-next-80b-a3b-instruct:free,minimax/minimax-m2.5:free,meta-llama/llama-3.3-70b-instruct:free}
+      OPENROUTER_CODE_MODELS: ${OPENROUTER_CODE_MODELS:-qwen/qwen3-coder:free,openai/gpt-oss-120b:free,qwen/qwen3-next-80b-a3b-instruct:free,minimax/minimax-m2.5:free,meta-llama/llama-3.3-70b-instruct:free}
       NVIDIA_AI_API_KEY: ${NVIDIA_AI_API_KEY:-}
       NVIDIA_AI_MODEL: ${NVIDIA_AI_MODEL:-nvidia/tiiuae/falcon3-7b-instruct}
+      NVIDIA_CHAT_MODELS: ${NVIDIA_CHAT_MODELS:-nvidia/tiiuae/falcon3-7b-instruct}
+      NVIDIA_CODE_MODELS: ${NVIDIA_CODE_MODELS:-nvidia/tiiuae/falcon3-7b-instruct}
     ports:
       - "8002:8002"
 
@@ -57,6 +69,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     command: uvicorn services.voice.app.main:app --host 0.0.0.0 --port 8003
+    env_file:
+      - .env
     environment:
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
       VOICE_SPIDERMAN_ID: ${VOICE_SPIDERMAN_ID:-hero_spiderman}
@@ -71,6 +85,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     command: uvicorn services.executor.app.main:app --host 0.0.0.0 --port 8004
+    env_file:
+      - .env
     environment:
       ENABLE_DOCKER_SANDBOX: "true"
       DOCKER_TIMEOUT_SECONDS: "20"

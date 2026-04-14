@@ -20,7 +20,7 @@ trap cleanup EXIT INT TERM
 
 cd "${ROOT_DIR}"
 
-VENV_PYTHON="${VENV_PYTHON:-${ROOT_DIR}/.venv/bin/python}"
+VENV_PYTHON="${VENV_PYTHON:-${ROOT_DIR}/backend/.venv/bin/python}"
 if [[ ! -x "${VENV_PYTHON}" ]]; then
   echo "Missing virtual environment Python at ${VENV_PYTHON}." >&2
   echo "Run 'make install' (or 'make venv && make install-backend-deps') first." >&2
@@ -34,7 +34,7 @@ BACKEND_PID=$!
 sleep 2
 
 echo "Starting frontend..."
-npm run dev &
+(cd "${ROOT_DIR}/frontend" && npm run dev) &
 FRONTEND_PID=$!
 
 echo
