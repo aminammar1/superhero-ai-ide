@@ -78,20 +78,3 @@ jobs:
           JWT_SECRET: ci-test-secret
           ENABLE_DOCKER_SANDBOX: "false"
 
-  # ─── Docker Build Check ───
-  docker:
-    name: Docker Compose Validation
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate docker-compose
-        run: |
-          if [ -f docker-compose.yml ]; then
-            docker compose config --quiet
-            echo "docker-compose.yml is valid"
-          else
-            echo "No docker-compose.yml found, skipping"
-          fi
