@@ -645,10 +645,28 @@ export function FaceLogin() {
         Authenticate with Face ID
       </motion.button>
 
-      {/* Social login - styled better with more spacing */}
+      {/* Social login — OAuth SSO */}
       <div className="mt-8 flex items-center gap-3">
         <button
           type="button"
+          onClick={() => {
+            const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+            if (!clientId) {
+              toast.error("Set GOOGLE_CLIENT_ID in .env and rebuild to enable Google sign-in.");
+              return;
+            }
+            const redirectUri = `${window.location.origin}/auth/callback`;
+            const params = new URLSearchParams({
+              client_id: clientId,
+              redirect_uri: redirectUri,
+              response_type: "code",
+              scope: "openid profile",
+              state: "google",
+              access_type: "offline",
+              prompt: "select_account",
+            });
+            window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+          }}
           className="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-5 py-2.5 text-[11px] font-medium text-white/40 transition hover:border-white/[0.15] hover:bg-white/[0.05] hover:text-white/60 backdrop-blur-sm"
         >
           <GoogleIcon />
@@ -656,6 +674,21 @@ export function FaceLogin() {
         </button>
         <button
           type="button"
+          onClick={() => {
+            const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
+            if (!clientId) {
+              toast.error("Set GITHUB_CLIENT_ID in .env and rebuild to enable GitHub sign-in.");
+              return;
+            }
+            const redirectUri = `${window.location.origin}/auth/callback`;
+            const params = new URLSearchParams({
+              client_id: clientId,
+              redirect_uri: redirectUri,
+              scope: "read:user",
+              state: "github",
+            });
+            window.location.href = `https://github.com/login/oauth/authorize?${params}`;
+          }}
           className="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-5 py-2.5 text-[11px] font-medium text-white/40 transition hover:border-white/[0.15] hover:bg-white/[0.05] hover:text-white/60 backdrop-blur-sm"
         >
           <GitBranch className="h-3.5 w-3.5" />

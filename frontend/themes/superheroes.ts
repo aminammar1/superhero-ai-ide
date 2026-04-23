@@ -29,7 +29,7 @@ export const heroThemes: HeroThemeDefinition[] = [
     title: "Stealth Architect",
     description:
       "A stealth UI with noir panels, disciplined spacing, and minimal high-contrast highlights.",
-    asset: "/assets/batman-3D.jpg",
+    asset: "/assets/batman-3D.png",
     palette: ["#0f172a", "#eab308", "#334155"],
     ambientClass: "theme-batman",
     voiceLabel: "Deep / dark"
@@ -40,7 +40,7 @@ export const heroThemes: HeroThemeDefinition[] = [
     title: "Heroic System Designer",
     description:
       "Bold typography, optimistic gradients, and a clear visual hierarchy for decisive building.",
-    asset: "/assets/superman-3D.jpg",
+    asset: "/assets/superman-3D.png",
     palette: ["#2563eb", "#ef4444", "#f8fafc"],
     ambientClass: "theme-superman",
     voiceLabel: "Confident / heroic"

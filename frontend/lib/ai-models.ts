@@ -1,12 +1,35 @@
 export interface ModelOption {
   id: string;
   label: string;
-  provider: "openrouter" | "nvidia";
+  provider: "agentrouter" | "openrouter" | "nvidia";
   description?: string;
   tag?: string;
   /** Extra keywords for in-chat search */
   searchTags?: string[];
 }
+
+/* ──────────────────────────────────────────────────────────────────
+   AgentRouter — Premium models via unified OpenAI-compatible gateway
+   ($100 credit balance available)
+   ────────────────────────────────────────────────────────────── */
+export const AGENTROUTER_MODEL_OPTIONS: ModelOption[] = [
+  {
+    id: "gpt-5",
+    label: "GPT-5",
+    provider: "agentrouter",
+    description: "OpenAI's flagship model via AgentRouter",
+    tag: "premium",
+    searchTags: ["openai", "gpt", "gpt5", "best", "premium"],
+  },
+  {
+    id: "claude-sonnet-4-20250514",
+    label: "Claude 4 Sonnet",
+    provider: "agentrouter",
+    description: "Anthropic's latest Sonnet via AgentRouter",
+    tag: "premium",
+    searchTags: ["anthropic", "claude", "sonnet", "premium"],
+  },
+];
 
 /* ──────────────────────────────────────────────────────────────────
    OpenRouter Free Models — diversified across providers to
@@ -64,6 +87,14 @@ export const OPENROUTER_FREE_MODEL_OPTIONS: ModelOption[] = [
   },
 
   // ── Coding-first (slower but powerful) ──
+  {
+    id: "zai-org/glm-5:free",
+    label: "GLM-5 744B",
+    provider: "openrouter",
+    description: "Zhipu AI 744B MoE — agentic coding flagship",
+    tag: "code",
+    searchTags: ["glm", "zhipu", "glm5", "moe", "agentic", "coding"],
+  },
   {
     id: "qwen/qwen3-coder:free",
     label: "Qwen3 Coder 480B",
@@ -132,9 +163,9 @@ export const OPENROUTER_FREE_MODEL_OPTIONS: ModelOption[] = [
     id: "z-ai/glm-4.5-air:free",
     label: "GLM 4.5 Air",
     provider: "openrouter",
-    description: "Z.ai general-purpose model",
+    description: "Zhipu general-purpose model",
     tag: "chat",
-    searchTags: ["glm", "zai", "general"],
+    searchTags: ["glm", "zai", "zhipu", "general"],
   },
   {
     id: "meta-llama/llama-3.2-3b-instruct:free",
@@ -148,46 +179,58 @@ export const OPENROUTER_FREE_MODEL_OPTIONS: ModelOption[] = [
 
 /* ──────────────────────────────────────────────────────────────────
    NVIDIA NIM API — direct access via integrate.api.nvidia.com
+   (updated: removed EOL'd models like falcon3)
    ────────────────────────────────────────────────────────────── */
 export const NVIDIA_MODEL_OPTIONS: ModelOption[] = [
   {
-    id: "nvidia/tiiuae/falcon3-7b-instruct",
-    label: "Falcon3 7B",
+    id: "meta/llama-3.3-70b-instruct",
+    label: "Llama 3.3 70B (NIM)",
     provider: "nvidia",
-    description: "Fast lightweight instruct model",
-    tag: "chat",
-    searchTags: ["falcon", "fast", "instruct"],
+    description: "Meta's powerful 70B via NVIDIA NIM",
+    tag: "code",
+    searchTags: ["llama", "nim", "meta", "powerful"],
   },
   {
-    id: "nvidia/meta/llama-3.1-8b-instruct",
+    id: "meta/llama-3.1-8b-instruct",
     label: "Llama 3.1 8B (NIM)",
     provider: "nvidia",
-    description: "Meta Llama via NVIDIA NIM",
+    description: "Fast Meta Llama via NVIDIA NIM",
     tag: "chat",
-    searchTags: ["llama", "nim", "meta"],
+    searchTags: ["llama", "nim", "meta", "fast"],
   },
   {
-    id: "nvidia/mistralai/mistral-7b-instruct-v0.3",
-    label: "Mistral 7B v0.3 (NIM)",
+    id: "nvidia/llama-3.1-nemotron-nano-8b-v1",
+    label: "Nemotron Nano 8B (NIM)",
     provider: "nvidia",
-    description: "Mistral instruct via NIM",
+    description: "NVIDIA's efficient reasoning model",
+    tag: "reason",
+    searchTags: ["nvidia", "nemotron", "nano", "nim"],
+  },
+  {
+    id: "nvidia/nemotron-mini-4b-instruct",
+    label: "Nemotron Mini 4B (NIM)",
+    provider: "nvidia",
+    description: "Ultra-fast lightweight model",
     tag: "chat",
-    searchTags: ["mistral", "nim", "instruct"],
+    searchTags: ["nvidia", "nemotron", "mini", "fast"],
   },
 ];
 
 /* ──────────────────────────────────────────────────────────────────
    Combined lists — used by the model selector
+   AgentRouter premium models first → OpenRouter free → NVIDIA NIM
    ────────────────────────────────────────────────────────────── */
 export const CHAT_MODEL_OPTIONS: ModelOption[] = [
+  ...AGENTROUTER_MODEL_OPTIONS,
   ...OPENROUTER_FREE_MODEL_OPTIONS,
   ...NVIDIA_MODEL_OPTIONS,
 ];
 
 export const CODE_MODEL_OPTIONS: ModelOption[] = [
+  ...AGENTROUTER_MODEL_OPTIONS,
   ...NVIDIA_MODEL_OPTIONS,
   ...OPENROUTER_FREE_MODEL_OPTIONS,
 ];
 
-export const DEFAULT_CHAT_MODEL = "google/gemma-4-31b-it:free";
-export const DEFAULT_CODE_MODEL = NVIDIA_MODEL_OPTIONS[0].id;
+export const DEFAULT_CHAT_MODEL = "gpt-5";
+export const DEFAULT_CODE_MODEL = "gpt-5";

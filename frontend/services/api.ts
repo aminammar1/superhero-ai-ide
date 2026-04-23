@@ -6,12 +6,28 @@ import type {
   Language,
   UserProfile,
 } from "@/lib/types";
+import type { ImportEntry } from "@/store/file-store";
 import { baseURL, http } from "@/services/http";
 import { useAppStore } from "@/store/app-store";
 
 export async function loginWithFace(imageBase64: string) {
   const response = await http.post<FaceAuthResponse>("/api/auth/face-login", {
     image_base64: imageBase64
+  });
+  return response.data;
+}
+
+export async function loginWithGitHub(code: string) {
+  const response = await http.post<FaceAuthResponse>("/api/auth/oauth/github", {
+    code,
+  });
+  return response.data;
+}
+
+export async function loginWithGoogle(code: string, redirectUri: string) {
+  const response = await http.post<FaceAuthResponse>("/api/auth/oauth/google", {
+    code,
+    redirect_uri: redirectUri,
   });
   return response.data;
 }
@@ -150,3 +166,21 @@ export async function deleteWorkspaceFile(path: string) {
     // Silent fail
   }
 }
+
+/**
+ * Import a GitHub repo into the workspace.
+ */
+export async function importGitHubRepo(repoUrl: string, branch = "main") {
+  const response = await http.post<{
+    success: boolean;
+    repo?: string;
+    branch?: string;
+    files?: ImportEntry[];
+    error?: string;
+  }>("/api/workspace/import-github", {
+    repo_url: repoUrl,
+    branch,
+  });
+  return response.data;
+}
+

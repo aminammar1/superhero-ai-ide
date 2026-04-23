@@ -26,20 +26,36 @@ class Settings(BaseSettings):
     voice_service_url: str = "http://voice-service:8003"
     executor_service_url: str = "http://executor-service:8004"
 
+    # ── AgentRouter (primary AI provider) ──
+    agent_router_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AGENT_ROUTER_API_KEY"),
+    )
+    agent_router_base_url: str = "https://agentrouter.org/v1"
+    agent_router_chat_models: str = Field(
+        default="gpt-5,claude-sonnet-4-20250514",
+        validation_alias=AliasChoices("AGENT_ROUTER_CHAT_MODELS"),
+    )
+    agent_router_code_models: str = Field(
+        default="gpt-5,claude-sonnet-4-20250514",
+        validation_alias=AliasChoices("AGENT_ROUTER_CODE_MODELS"),
+    )
+
+    # ── NVIDIA NIM ──
     nvidia_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("NVIDIA_AI_API_KEY", "NVIDIA_API_KEY"),
     )
     nvidia_model: str = Field(
-        default="nvidia/tiiuae/falcon3-7b-instruct",
+        default="meta/llama-3.3-70b-instruct",
         validation_alias=AliasChoices("NVIDIA_AI_MODEL", "NVIDIA_MODEL"),
     )
     nvidia_chat_models: str = Field(
-        default="nvidia/tiiuae/falcon3-7b-instruct",
+        default="meta/llama-3.3-70b-instruct,meta/llama-3.1-8b-instruct,nvidia/llama-3.1-nemotron-nano-8b-v1,nvidia/nemotron-mini-4b-instruct",
         validation_alias=AliasChoices("NVIDIA_CHAT_MODELS"),
     )
     nvidia_code_models: str = Field(
-        default="nvidia/tiiuae/falcon3-7b-instruct",
+        default="meta/llama-3.3-70b-instruct,meta/llama-3.1-8b-instruct,nvidia/llama-3.1-nemotron-nano-8b-v1,nvidia/nemotron-mini-4b-instruct",
         validation_alias=AliasChoices("NVIDIA_CODE_MODELS"),
     )
     openrouter_api_key: str | None = Field(
@@ -52,6 +68,7 @@ class Settings(BaseSettings):
     )
     openrouter_chat_models: str = Field(
         default=(
+            "zai-org/glm-5:free,"
             "google/gemma-4-31b-it:free,"
             "minimax/minimax-m2.5:free,"
             "openai/gpt-oss-20b:free,"
@@ -65,6 +82,7 @@ class Settings(BaseSettings):
     )
     openrouter_code_models: str = Field(
         default=(
+            "zai-org/glm-5:free,"
             "google/gemma-4-31b-it:free,"
             "minimax/minimax-m2.5:free,"
             "openai/gpt-oss-20b:free,"
@@ -89,6 +107,12 @@ class Settings(BaseSettings):
     voice_batman_id: str = "VR6AewLTigWG4xSOukaG"
     voice_superman_id: str = "pNInz6obpgDQGcFmaJgB"
     voice_ironman_id: str = "TxGEqnHWrfWFTfGW9XjX"
+
+    # ── OAuth SSO ──
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
 
     enable_docker_sandbox: bool = False
     docker_timeout_seconds: int = 30

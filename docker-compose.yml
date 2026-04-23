@@ -3,6 +3,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     env_file:
       - .env
     environment:
@@ -53,14 +57,17 @@ services:
     env_file:
       - .env
     environment:
+      AGENT_ROUTER_API_KEY: ${AGENT_ROUTER_API_KEY:-}
+      AGENT_ROUTER_CHAT_MODELS: ${AGENT_ROUTER_CHAT_MODELS:-gpt-5,claude-sonnet-4-20250514}
+      AGENT_ROUTER_CODE_MODELS: ${AGENT_ROUTER_CODE_MODELS:-gpt-5,claude-sonnet-4-20250514}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen3-coder:free}
       OPENROUTER_CHAT_MODELS: ${OPENROUTER_CHAT_MODELS:-qwen/qwen3-coder:free,openai/gpt-oss-120b:free,qwen/qwen3-next-80b-a3b-instruct:free,minimax/minimax-m2.5:free,meta-llama/llama-3.3-70b-instruct:free}
       OPENROUTER_CODE_MODELS: ${OPENROUTER_CODE_MODELS:-qwen/qwen3-coder:free,openai/gpt-oss-120b:free,qwen/qwen3-next-80b-a3b-instruct:free,minimax/minimax-m2.5:free,meta-llama/llama-3.3-70b-instruct:free}
       NVIDIA_AI_API_KEY: ${NVIDIA_AI_API_KEY:-}
-      NVIDIA_AI_MODEL: ${NVIDIA_AI_MODEL:-nvidia/tiiuae/falcon3-7b-instruct}
-      NVIDIA_CHAT_MODELS: ${NVIDIA_CHAT_MODELS:-nvidia/tiiuae/falcon3-7b-instruct}
-      NVIDIA_CODE_MODELS: ${NVIDIA_CODE_MODELS:-nvidia/tiiuae/falcon3-7b-instruct}
+      NVIDIA_AI_MODEL: ${NVIDIA_AI_MODEL:-meta/llama-3.3-70b-instruct}
+      NVIDIA_CHAT_MODELS: ${NVIDIA_CHAT_MODELS:-meta/llama-3.3-70b-instruct,meta/llama-3.1-8b-instruct,nvidia/llama-3.1-nemotron-nano-8b-v1,nvidia/nemotron-mini-4b-instruct}
+      NVIDIA_CODE_MODELS: ${NVIDIA_CODE_MODELS:-meta/llama-3.3-70b-instruct,meta/llama-3.1-8b-instruct,nvidia/llama-3.1-nemotron-nano-8b-v1,nvidia/nemotron-mini-4b-instruct}
     ports:
       - "8002:8002"
 

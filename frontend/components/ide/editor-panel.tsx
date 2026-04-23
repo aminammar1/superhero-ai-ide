@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Play, Loader2, Square, Code2 } from "lucide-react";
+import { Play, Loader2, Code2, X } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { CodeEditor } from "@/components/ide/code-editor";
@@ -39,6 +39,7 @@ export function EditorPanel() {
   const activeFileId = useFileStore((s) => s.activeFileId);
   const activeFile = activeFileId ? useFileStore.getState().getFileById(activeFileId) : null;
   const updateFileContent = useFileStore((s) => s.updateFileContent);
+  const setActiveFile = useFileStore((s) => s.setActiveFile);
 
   useEffect(() => {
     if (!activeFileId) {
@@ -60,6 +61,11 @@ export function EditorPanel() {
     if (activeFileId) {
       updateFileContent(activeFileId, value);
     }
+  };
+
+  const handleCloseFile = () => {
+    setActiveFile(null as unknown as string);
+    setCode("");
   };
 
   const handleRun = async () => {
@@ -89,7 +95,7 @@ export function EditorPanel() {
       >
         {/* File tab */}
         {activeFile ? (
-          <div className="flex items-center gap-2 rounded-md border border-primary/15 bg-primary/5 px-3 py-1">
+          <div className="group flex items-center gap-2 rounded-md border border-primary/15 bg-primary/5 px-3 py-1">
             <span
               className="flex h-4 w-5 items-center justify-center rounded text-[8px] font-bold tracking-wider text-primary/60"
               style={{ backgroundColor: "rgba(var(--theme-primary-raw), 0.1)" }}
@@ -98,10 +104,22 @@ export function EditorPanel() {
             </span>
             <span className="text-xs font-medium text-white/75">{activeFile.name}</span>
             <motion.div
-              className="h-1.5 w-1.5 rounded-full bg-primary/50"
+              className="h-1.5 w-1.5 rounded-full bg-primary/50 group-hover:hidden"
               animate={{ opacity: [0.3, 1, 0.3] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
+            {/* Close button — appears on hover */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCloseFile();
+              }}
+              className="hidden h-4 w-4 items-center justify-center rounded-sm text-white/30 transition hover:bg-white/10 hover:text-white/70 group-hover:flex"
+              title="Close file"
+            >
+              <X className="h-3 w-3" />
+            </button>
           </div>
         ) : (
           <div className="flex items-center gap-2 text-white/25">

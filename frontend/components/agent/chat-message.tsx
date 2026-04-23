@@ -17,6 +17,7 @@ import {
   XCircle,
   Brain,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 
 /* ────────────────────────────────────────────
@@ -30,7 +31,7 @@ const ACTION_ICONS: Record<ActionIndicator["type"], typeof FileSearch> = {
   delete_file: Trash2,
   create_folder: FolderPlus,
   modify_file: FileEdit,
-  thinking: Brain,
+  thinking: Sparkles,
 };
 
 const ACTION_COLORS: Record<ActionIndicator["type"], string> = {
@@ -52,8 +53,35 @@ const ACTION_VERBS: Record<ActionIndicator["type"], string> = {
   delete_file: "Deleted",
   create_folder: "Created",
   modify_file: "Modified",
-  thinking: "Thought",
+  thinking: "Processed",
 };
+
+/* ────────────────────────────────────────────
+   Cursor/Copilot-style streaming dots
+   ──────────────────────────────────────────── */
+function StreamingDots({ color }: { color: string }) {
+  return (
+    <span className="inline-flex items-center gap-[3px] ml-0.5">
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="inline-block h-[5px] w-[5px] rounded-full"
+          style={{ background: color }}
+          animate={{
+            opacity: [0.2, 0.8, 0.2],
+            scale: [0.8, 1.1, 0.8],
+          }}
+          transition={{
+            duration: 0.8,
+            delay: i * 0.15,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </span>
+  );
+}
 
 /* ────────────────────────────────────────────
    Cursor-style Action Step
@@ -63,6 +91,7 @@ function ActionStep({ action }: { action: ActionIndicator }) {
   const color = ACTION_COLORS[action.type] || "#60a5fa";
   const isDone = action.status === "done";
   const isError = action.status === "error";
+  const isRunning = action.status === "running";
   const verb = isDone ? ACTION_VERBS[action.type] || "Done" : action.label;
 
   return (
@@ -72,9 +101,9 @@ function ActionStep({ action }: { action: ActionIndicator }) {
       transition={{ duration: 0.1 }}
       className="flex items-center gap-2 py-[3px]"
     >
-      {/* Progress pipe */}
+      {/* Progress indicator */}
       <div className="flex h-4 w-4 shrink-0 items-center justify-center">
-        {action.status === "running" ? (
+        {isRunning ? (
           <motion.div
             className="h-3 w-3 rounded-full border-[1.5px] border-t-transparent"
             style={{ borderColor: color, borderTopColor: "transparent" }}
@@ -130,11 +159,52 @@ export function ChatMessageBubble({
   theme: HeroTheme;
 }) {
   const hero = heroThemeMap[theme];
+  const color = hero.palette[0];
   const isAssistant = message.role === "assistant";
   const isAction = message.role === "action";
   const hasActions = message.actions && message.actions.length > 0;
+  const isThinkingOnly = hasActions && message.actions!.every((a) => a.type === "thinking");
+  const allDone = hasActions && message.actions!.every((a) => a.status === "done" || a.status === "error");
 
-  // Action-only message (Cursor-like tool execution steps)
+  // For "thinking" only action messages — show as inline Cursor-style indicator
+  if (isAction && isThinkingOnly) {
+    const thinkAction = message.actions![0];
+    // When done, don't render at all (the assistant message handles it)
+    if (thinkAction.status === "done") return null;
+    if (thinkAction.status === "error") return null;
+
+    // Show compact inline "generating" indicator
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 3 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -3 }}
+        className="flex gap-2"
+      >
+        <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-xl border border-white/[0.08] mt-0.5">
+          <Image src={hero.asset} alt={hero.name} fill className="object-cover" />
+        </div>
+        <div
+          className="flex items-center gap-2 rounded-2xl border px-3 py-2"
+          style={{
+            borderColor: `${color}15`,
+            background: `${color}05`,
+          }}
+        >
+          <motion.div
+            className="h-3 w-3 rounded-full border-[1.5px] border-t-transparent"
+            style={{ borderColor: `${color}60`, borderTopColor: "transparent" }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+          />
+          <span className="text-[11px] text-white/35">Generating</span>
+          <StreamingDots color={`${color}80`} />
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Action-only message (file operations — Cursor-like tool execution steps)
   if (isAction && hasActions) {
     return (
       <motion.div
@@ -144,7 +214,7 @@ export function ChatMessageBubble({
       >
         {/* Vertical connection line */}
         <div className="flex flex-col items-center ml-3">
-          <div className="w-[1px] flex-1" style={{ background: `linear-gradient(180deg, transparent, ${hero.palette[0]}15, transparent)` }} />
+          <div className="w-[1px] flex-1" style={{ background: `linear-gradient(180deg, transparent, ${color}15, transparent)` }} />
         </div>
 
         <div className="flex flex-col rounded-lg border border-white/[0.04] bg-white/[0.015] px-2.5 py-1.5 max-w-[85%]">
@@ -185,11 +255,11 @@ export function ChatMessageBubble({
           )}
         >
           {message.content || (
-            <span className="inline-flex gap-1 text-white/25">
-              <span className="animate-pulse">·</span>
-              <span className="animate-pulse" style={{ animationDelay: "150ms" }}>·</span>
-              <span className="animate-pulse" style={{ animationDelay: "300ms" }}>·</span>
-            </span>
+            isAssistant ? (
+              <StreamingDots color={`${color}80`} />
+            ) : (
+              <span className="text-white/25">...</span>
+            )
           )}
         </div>
       </div>

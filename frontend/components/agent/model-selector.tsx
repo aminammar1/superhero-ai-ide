@@ -10,14 +10,16 @@ import { CHAT_MODEL_OPTIONS } from "@/lib/ai-models";
 /* ──────────────────────────────────────────────────────────────── */
 
 const TAG_CONFIG: Record<string, { icon: typeof Code2; color: string; label: string }> = {
-  code:   { icon: Code2,        color: "#a78bfa", label: "Code" },
-  chat:   { icon: MessageSquare, color: "#60a5fa", label: "Chat" },
-  reason: { icon: Brain,        color: "#f472b6", label: "Reason" },
+  premium: { icon: Brain,        color: "#f59e0b", label: "Premium" },
+  code:    { icon: Code2,        color: "#a78bfa", label: "Code" },
+  chat:    { icon: MessageSquare, color: "#60a5fa", label: "Chat" },
+  reason:  { icon: Brain,        color: "#f472b6", label: "Reason" },
 };
 
 const PROVIDER_BADGE: Record<string, { color: string; label: string }> = {
-  openrouter: { color: "#8b5cf6", label: "OR" },
-  nvidia:     { color: "#76b900", label: "NV" },
+  agentrouter: { color: "#f59e0b", label: "AR" },
+  openrouter:  { color: "#8b5cf6", label: "OR" },
+  nvidia:      { color: "#76b900", label: "NV" },
 };
 
 /* ──────────────────────────────────────────────────────────────── */
@@ -241,6 +243,7 @@ export function ModelSelector({ value, onChange, accentColor = "#a78bfa" }: Mode
             {/* Footer */}
             <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1.5">
               <div className="flex items-center gap-2 text-[8px] text-white/15">
+                <span style={{ color: PROVIDER_BADGE.agentrouter.color }}>● AgentRouter</span>
                 <span style={{ color: PROVIDER_BADGE.openrouter.color }}>● OpenRouter</span>
                 <span style={{ color: PROVIDER_BADGE.nvidia.color }}>● NVIDIA</span>
               </div>

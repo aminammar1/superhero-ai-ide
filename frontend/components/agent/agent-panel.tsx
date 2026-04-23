@@ -384,8 +384,6 @@ export function AgentPanel() {
 
   const handleChat = async (prompt: string) => {
     const model = pickModelForPrompt(prompt, chatModel, codeModel);
-    const thinkId = crypto.randomUUID();
-    pushActionMessage(thinkId, [{ type: "thinking", label: "Thinking", status: "running" }]);
     const aId = crypto.randomUUID();
     startAssistantMessage(aId);
     setStreamingChat(true);
@@ -401,13 +399,9 @@ export function AgentPanel() {
         controller.signal,
       );
 
-      // If aborted, mark as interrupted and stop processing
-      if (controller.signal.aborted) {
-        updateActionStatus(thinkId, 0, "done");
-        return;
-      }
+      // If aborted, stop processing
+      if (controller.signal.aborted) return;
 
-      updateActionStatus(thinkId, 0, "done");
       const finalText = useAppStore.getState().messages.find((m) => m.id === aId)?.content ?? "";
       const { cleanText, toolCalls } = parseToolCalls(finalText);
       useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: cleanText } : msg) }));
@@ -417,7 +411,7 @@ export function AgentPanel() {
         const autoTools = toolCalls.filter((tc) => !requiresApproval(tc.tool));
         const approvalTools = toolCalls.filter((tc) => requiresApproval(tc.tool));
 
-        // Show action indicators only for auto-exec tools (approval tools get their own via pendingActions effect)
+        // Show action indicators for auto-exec tools
         if (autoTools.length > 0) {
           const toolMsgId = crypto.randomUUID();
           pushActionMessage(toolMsgId, autoTools.map((tc) => ({
@@ -430,16 +424,14 @@ export function AgentPanel() {
           }
         }
 
-        // Queue approval-needed tools (pendingActions effect will show their indicators)
+        // Queue approval-needed tools
         for (const tc of approvalTools) {
           queueAction(tc);
         }
       }
       if (usesVoiceOutput) await playVoice(cleanText);
     } catch (e) {
-      // Don't show error toast on abort
       if (controller.signal.aborted) return;
-      updateActionStatus(thinkId, 0, "error");
       toast.error(e instanceof Error ? e.message : "Failed.");
     } finally {
       abortRef.current = null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import {
   ChevronRight,
@@ -13,13 +13,18 @@ import {
   FileText,
   Pencil,
   Zap,
+  FolderGit,
+  Loader2,
+  X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import { useFileStore, type FileNode } from "@/store/file-store";
 import { useAppStore } from "@/store/app-store";
 import { heroThemeMap } from "@/themes/superheroes";
 import { HeroMotif } from "@/components/ui/hero-motif";
 import { cn } from "@/lib/utils";
+import { importGitHubRepo } from "@/services/api";
 
 interface ContextMenuState {
   x: number;
@@ -123,6 +128,9 @@ export function FileExplorer() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const openCreateInput = (parentId: string | null, type: "file" | "folder") => {
     setInputValue("");
@@ -173,6 +181,31 @@ export function FileExplorer() {
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId, nodeType });
   };
+
+  const loadFromImportTree = useFileStore((s) => s.loadFromImportTree);
+
+  const handleImportGitHub = useCallback(async () => {
+    const url = importUrl.trim();
+    if (!url) return;
+    setImporting(true);
+    try {
+      const result = await importGitHubRepo(url);
+      if (result.success) {
+        if (result.files && Array.isArray(result.files)) {
+          loadFromImportTree(result.files);
+        }
+        toast.success(`Imported ${result.repo} successfully!`);
+        setShowImport(false);
+        setImportUrl("");
+      } else {
+        toast.error(result.error || "Import failed.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed.");
+    } finally {
+      setImporting(false);
+    }
+  }, [importUrl, loadFromImportTree]);
 
   const isEmpty = files.length === 0 && !showInput;
 
@@ -265,6 +298,14 @@ export function FileExplorer() {
         <div className="flex gap-0.5">
           <button
             type="button"
+            onClick={() => setShowImport(true)}
+            className="flex h-5 w-5 items-center justify-center rounded text-white/20 hover:bg-primary/10 hover:text-primary/60 transition"
+            title="Import from GitHub"
+          >
+            <FolderGit className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
             onClick={() => openCreateInput(null, "file")}
             className="flex h-5 w-5 items-center justify-center rounded text-white/20 hover:bg-primary/10 hover:text-primary/60 transition"
             title="New file"
@@ -302,22 +343,30 @@ export function FileExplorer() {
             <p className="text-[10px] text-white/12">
               Create files or ask {hero.name} to set up a project
             </p>
-            <div className="flex gap-2 mt-2">
+            <div className="flex flex-col gap-1.5 mt-3 w-full">
               <button
                 type="button"
                 onClick={() => openCreateInput(null, "file")}
-                className="flex items-center gap-1.5 rounded-lg border border-primary/10 bg-primary/5 px-3 py-1.5 text-[10px] text-primary/40 transition hover:bg-primary/10 hover:text-primary/60"
+                className="flex items-center gap-2 rounded-lg border border-primary/10 bg-primary/5 px-3 py-2 text-[10px] text-primary/40 transition hover:bg-primary/10 hover:text-primary/60"
               >
-                <FileText className="h-3 w-3" />
+                <FileText className="h-3 w-3 shrink-0" />
                 New File
               </button>
               <button
                 type="button"
                 onClick={() => openCreateInput(null, "folder")}
-                className="flex items-center gap-1.5 rounded-lg border border-primary/10 bg-primary/5 px-3 py-1.5 text-[10px] text-primary/40 transition hover:bg-primary/10 hover:text-primary/60"
+                className="flex items-center gap-2 rounded-lg border border-primary/10 bg-primary/5 px-3 py-2 text-[10px] text-primary/40 transition hover:bg-primary/10 hover:text-primary/60"
               >
-                <FolderPlus className="h-3 w-3" />
+                <FolderPlus className="h-3 w-3 shrink-0" />
                 New Folder
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-2 rounded-lg border border-primary/10 bg-primary/5 px-3 py-2 text-[10px] text-primary/40 transition hover:bg-primary/10 hover:text-primary/60"
+              >
+                <FolderGit className="h-3 w-3 shrink-0" />
+                Import from GitHub
               </button>
             </div>
           </div>
@@ -387,6 +436,71 @@ export function FileExplorer() {
           onNewFolder={(parentId) => openCreateInput(parentId, "folder")}
         />
       )}
+
+      {/* GitHub Import Modal */}
+      <AnimatePresence>
+        {showImport && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setShowImport(false); setImportUrl(""); }}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed left-1/2 top-1/2 z-50 w-[380px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/[0.08] bg-[#0c0c12]/98 p-5 backdrop-blur-2xl shadow-[0_12px_48px_rgba(0,0,0,0.6)]"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <FolderGit className="h-4 w-4 text-white/50" />
+                  <span className="text-sm font-medium text-white/70">Import from GitHub</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowImport(false); setImportUrl(""); }}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-white/30 hover:bg-white/[0.06] hover:text-white/60"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <input
+                autoFocus
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleImportGitHub();
+                  if (e.key === "Escape") { setShowImport(false); setImportUrl(""); }
+                }}
+                placeholder="user/repo or https://github.com/user/repo"
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white/80 outline-none placeholder:text-white/20 focus:border-primary/25"
+              />
+
+              <p className="mt-2 text-[10px] text-white/20">
+                Imports the default branch. Supports public repositories.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => void handleImportGitHub()}
+                disabled={importing || !importUrl.trim()}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-primary/15 bg-primary/10 py-2 text-xs font-medium text-primary/70 transition hover:bg-primary/15 disabled:opacity-40"
+              >
+                {importing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <FolderGit className="h-3.5 w-3.5" />
+                )}
+                {importing ? "Importing..." : "Import Repository"}
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

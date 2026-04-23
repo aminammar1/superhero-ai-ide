@@ -79,6 +79,28 @@ async def profile_onboarding(
     )
 
 
+# ═══════════════════════════════════════════════
+#   OAUTH SSO PROXY
+# ═══════════════════════════════════════════════
+
+@app.post("/api/auth/oauth/github")
+async def oauth_github(payload: dict):
+    return await request_json(
+        "POST",
+        f"{settings.auth_service_url}/oauth/github/callback",
+        payload=payload,
+    )
+
+
+@app.post("/api/auth/oauth/google")
+async def oauth_google(payload: dict):
+    return await request_json(
+        "POST",
+        f"{settings.auth_service_url}/oauth/google/callback",
+        payload=payload,
+    )
+
+
 @app.post("/api/code/generate")
 async def code_generate(
     payload: dict, authorization: Annotated[str | None, Header()] = None
@@ -247,3 +269,17 @@ async def workspace_shell(payload: dict):
     if response.is_error:
         raise HTTPException(response.status_code, response.text)
     return JSONResponse(content=response.json())
+
+
+@app.post("/api/workspace/import-github")
+async def workspace_import_github(payload: dict):
+    """Import a GitHub repo into the workspace (may take time to download)."""
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            f"{settings.executor_service_url}/workspace/import-github",
+            json=payload,
+        )
+    if response.is_error:
+        raise HTTPException(response.status_code, response.text)
+    return JSONResponse(content=response.json())
+

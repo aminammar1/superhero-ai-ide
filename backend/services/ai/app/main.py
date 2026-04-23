@@ -20,6 +20,10 @@ OPENROUTER_RETRY_DELAY_SECONDS = 1.5
 OPENROUTER_ERROR_LOG_BODY_LIMIT = 280
 _openrouter_cooldown_until = 0.0
 
+# AgentRouter settings
+AGENTROUTER_MAX_ATTEMPTS = 2
+AGENTROUTER_TIMEOUT_SECONDS = 90.0
+
 
 class OpenRouterRateLimited(RuntimeError):
     def __init__(self, retry_after_seconds: float):
@@ -166,10 +170,38 @@ def openrouter_error_detail(response: httpx.Response) -> str:
     return f"HTTP {response.status_code}"
 
 
+# Known NVIDIA NIM model prefixes (via integrate.api.nvidia.com)
+_NVIDIA_NIM_PREFIXES = ("nvidia/", "meta/", "mistralai/", "google/", "deepseek-ai/")
+
+
 def _is_nvidia_nim_model(model: str) -> bool:
     """NVIDIA NIM models (via integrate.api.nvidia.com) never end with :free.
     Models like nvidia/nemotron-3-super:free are OpenRouter-hosted."""
-    return model.startswith("nvidia/") and not model.endswith(":free")
+    if model.endswith(":free"):
+        return False
+    return any(model.startswith(p) for p in _NVIDIA_NIM_PREFIXES)
+
+
+def _is_agentrouter_model(model: str) -> bool:
+    """AgentRouter models don't end with :free and aren't NIM-hosted."""
+    if model.endswith(":free"):
+        return False
+    # Models like gpt-5, claude-sonnet-4-*, etc. that go through AgentRouter
+    ar_prefixes = ("gpt-", "claude-", "gemini-", "glm-")
+    return any(model.startswith(p) for p in ar_prefixes)
+
+
+def agentrouter_model_chain(selected_model: str | None, mode: str) -> list[str]:
+    configured = split_models(
+        settings.agent_router_chat_models if mode == "chat" else settings.agent_router_code_models
+    )
+    preferred = (selected_model or "").strip()
+
+    models = []
+    if preferred and _is_agentrouter_model(preferred):
+        models.append(preferred)
+    models.extend(configured)
+    return unique_models(models)
 
 
 def openrouter_model_chain(selected_model: str | None, mode: str) -> list[str]:
@@ -178,7 +210,7 @@ def openrouter_model_chain(selected_model: str | None, mode: str) -> list[str]:
     preferred = (selected_model or "").strip()
 
     models = []
-    if preferred and not _is_nvidia_nim_model(preferred):
+    if preferred and not _is_nvidia_nim_model(preferred) and not _is_agentrouter_model(preferred):
         models.append(preferred)
     models.extend(configured)
     if legacy:
@@ -188,7 +220,7 @@ def openrouter_model_chain(selected_model: str | None, mode: str) -> list[str]:
     if free_models:
         return free_models
 
-    if preferred and not _is_nvidia_nim_model(preferred):
+    if preferred and not _is_nvidia_nim_model(preferred) and not _is_agentrouter_model(preferred):
         raise OpenRouterNonFreeModel(preferred)
     if models:
         raise OpenRouterNonFreeModel(models[0])
@@ -294,6 +326,74 @@ async def openrouter_chat(messages: list[dict], models: list[str]) -> str:
         raise last_error
 
     raise RuntimeError("OpenRouter request failed for all configured models")
+
+
+async def agentrouter_chat(messages: list[dict], models: list[str]) -> str:
+    """Call AgentRouter (OpenAI-compatible gateway) with fallback across models."""
+    api_key = (settings.agent_router_api_key or "").strip()
+    base_url = (settings.agent_router_base_url or "").strip().rstrip("/")
+
+    if not api_key:
+        raise RuntimeError("AgentRouter is not configured (missing API key).")
+    if not models:
+        raise RuntimeError("No AgentRouter models configured.")
+    if not base_url:
+        base_url = "https://agentrouter.org/v1"
+
+    last_error: Exception | None = None
+    async with httpx.AsyncClient(timeout=AGENTROUTER_TIMEOUT_SECONDS) as client:
+        for model_name in models:
+            for attempt in range(1, AGENTROUTER_MAX_ATTEMPTS + 1):
+                try:
+                    response = await client.post(
+                        f"{base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": model_name,
+                            "messages": messages,
+                        },
+                    )
+
+                    if response.status_code == 429:
+                        logger.warning(
+                            "AgentRouter rate-limited model=%s attempt=%d/%d",
+                            model_name, attempt, AGENTROUTER_MAX_ATTEMPTS,
+                        )
+                        last_error = RuntimeError(f"AgentRouter rate-limited ({model_name})")
+                        if attempt < AGENTROUTER_MAX_ATTEMPTS:
+                            await asyncio.sleep(2.0)
+                            continue
+                        break
+
+                    if response.is_error:
+                        detail = response.text[:280] if response.text else f"HTTP {response.status_code}"
+                        logger.warning(
+                            "AgentRouter HTTP failure model=%s status=%d detail=%s",
+                            model_name, response.status_code, detail,
+                        )
+                        if response.status_code in (401, 403):
+                            raise RuntimeError(f"AgentRouter auth failed: {detail}")
+                        last_error = RuntimeError(f"AgentRouter model failed ({model_name}): HTTP {response.status_code}")
+                        break
+
+                    payload = response.json()
+                    return payload["choices"][0]["message"]["content"]
+
+                except httpx.TimeoutException:
+                    logger.warning("AgentRouter timeout model=%s attempt=%d", model_name, attempt)
+                    last_error = RuntimeError(f"AgentRouter timeout ({model_name})")
+                    break
+                except (KeyError, IndexError) as exc:
+                    logger.warning("AgentRouter malformed response model=%s: %s", model_name, exc)
+                    last_error = RuntimeError(f"AgentRouter bad response ({model_name})")
+                    break
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("AgentRouter request failed for all configured models")
 
 
 async def nvidia_chat(messages: list[dict], models: list[str]) -> str:
@@ -518,14 +618,18 @@ func main() {
 
 
 def provider_sequence(selected_model: str | None, default_first: str) -> list[str]:
+    """Determine provider order: agentrouter → openrouter → nvidia (with overrides)."""
     preferred = (selected_model or "").strip()
-    if preferred.startswith("nvidia/"):
-        return ["nvidia", "openrouter"]
-    if preferred:
-        return ["openrouter", "nvidia"]
+    if _is_agentrouter_model(preferred):
+        return ["agentrouter", "openrouter", "nvidia"]
+    if _is_nvidia_nim_model(preferred):
+        return ["nvidia", "agentrouter", "openrouter"]
+    if preferred and preferred.endswith(":free"):
+        return ["openrouter", "agentrouter", "nvidia"]
+    # Default: AgentRouter first (best models), fallback to others
     if default_first == "nvidia":
-        return ["nvidia", "openrouter"]
-    return ["openrouter", "nvidia"]
+        return ["nvidia", "agentrouter", "openrouter"]
+    return ["agentrouter", "openrouter", "nvidia"]
 
 
 @app.get("/health")
@@ -541,6 +645,7 @@ async def code(request: CodeRequest):
         f"Generate production-ready {request.language} code for this request. Return code only.\n{request.prompt}"
     )
 
+    ar_models = agentrouter_model_chain(selected_model, "code")
     nvidia_models = nvidia_model_chain(selected_model, "code")
     try:
         openrouter_models = openrouter_model_chain(selected_model, "code")
@@ -550,8 +655,19 @@ async def code(request: CodeRequest):
 
     code_block: str | None = None
     providers = provider_sequence(selected_model, "nvidia")
+    code_messages = [{"role": "user", "content": prompt}]
 
     for provider in providers:
+        if provider == "agentrouter":
+            if not ar_models:
+                continue
+            try:
+                code_block = await agentrouter_chat(code_messages, ar_models)
+                break
+            except Exception as exc:
+                logger.warning("AgentRouter code generation failed; trying fallback: %s", exc)
+                continue
+
         if provider == "nvidia":
             try:
                 code_block = await nvidia_code(prompt, nvidia_models)
@@ -560,18 +676,16 @@ async def code(request: CodeRequest):
                 logger.warning("NVIDIA code generation failed; trying fallback provider: %s", exc)
                 continue
 
-        if not openrouter_models:
-            continue
-        try:
-            code_block = await openrouter_chat(
-                [{"role": "user", "content": prompt}],
-                openrouter_models,
-            )
-            break
-        except OpenRouterRateLimited as exc:
-            logger.warning("OpenRouter code request rate-limited for %.1fs", exc.retry_after_seconds)
-        except Exception as exc:
-            logger.warning("OpenRouter code generation failed; trying fallback provider: %s", exc)
+        if provider == "openrouter":
+            if not openrouter_models:
+                continue
+            try:
+                code_block = await openrouter_chat(code_messages, openrouter_models)
+                break
+            except OpenRouterRateLimited as exc:
+                logger.warning("OpenRouter code request rate-limited for %.1fs", exc.retry_after_seconds)
+            except Exception as exc:
+                logger.warning("OpenRouter code generation failed; trying fallback provider: %s", exc)
 
     if code_block is None:
         code_block = local_code_fallback(request)
@@ -614,7 +728,7 @@ async def chat_stream(request: ChatRequest):
     messages.extend([message.model_dump() for message in filtered_history])
     messages.append({"role": "user", "content": request.prompt})
 
-
+    ar_models = agentrouter_model_chain(selected_model, "chat")
     nvidia_models = nvidia_model_chain(selected_model, "chat")
     try:
         openrouter_models = openrouter_model_chain(selected_model, "chat")
@@ -626,6 +740,16 @@ async def chat_stream(request: ChatRequest):
     providers = provider_sequence(selected_model, "openrouter")
 
     for provider in providers:
+        if provider == "agentrouter":
+            if not ar_models:
+                continue
+            try:
+                final_text = await agentrouter_chat(messages, ar_models)
+                break
+            except Exception as exc:
+                logger.warning("AgentRouter chat failed; trying fallback: %s", exc)
+                continue
+
         if provider == "openrouter":
             if not openrouter_models:
                 continue
@@ -633,16 +757,18 @@ async def chat_stream(request: ChatRequest):
                 final_text = await openrouter_chat(messages, openrouter_models)
                 break
             except OpenRouterRateLimited as exc:
-                logger.warning("OpenRouter rate-limited for chat %.1fs; trying NVIDIA", exc.retry_after_seconds)
+                logger.warning("OpenRouter rate-limited for chat %.1fs; trying next", exc.retry_after_seconds)
             except Exception as exc:
-                logger.warning("OpenRouter chat failed; trying NVIDIA: %s", exc)
+                logger.warning("OpenRouter chat failed; trying next: %s", exc)
             continue
 
-        try:
-            final_text = await nvidia_chat(messages, nvidia_models)
-            break
-        except Exception as exc:
-            logger.warning("NVIDIA chat failed; trying local fallback: %s", exc)
+        if provider == "nvidia":
+            try:
+                final_text = await nvidia_chat(messages, nvidia_models)
+                break
+            except Exception as exc:
+                logger.warning("NVIDIA chat failed; trying next: %s", exc)
+            continue
 
     if final_text is None:
         final_text = local_chat_fallback(request)

@@ -270,21 +270,36 @@ async def execute(request: ExecuteRequest):
             "duration_ms": 0,
         }
 
-    if not settings.enable_docker_sandbox:
-        return simulate_execution(request)
+    # Try Docker sandbox first if enabled
+    if settings.enable_docker_sandbox:
+        try:
+            return run_in_docker(request)
+        except FileNotFoundError:
+            # Docker not installed — fall through to direct execution
+            pass
+        except subprocess.TimeoutExpired:
+            return {
+                "stdout": "",
+                "stderr": "Execution timed out.",
+                "exit_code": 124,
+                "language": request.language,
+                "duration_ms": settings.docker_timeout_seconds * 1000,
+            }
+        except Exception:
+            # Docker daemon not running or other Docker error — fall through
+            pass
 
+    # Try direct (local) execution as fallback
     try:
-        return run_in_docker(request)
-    except FileNotFoundError:
-        return run_direct(request)
-    except subprocess.TimeoutExpired:
-        return {
-            "stdout": "",
-            "stderr": "Execution timed out.",
-            "exit_code": 124,
-            "language": request.language,
-            "duration_ms": settings.docker_timeout_seconds * 1000,
-        }
+        result = run_direct(request)
+        # If direct execution succeeded (runtime was found), return it
+        if result["exit_code"] != 127:
+            return result
+    except Exception:
+        pass
+
+    # Final fallback: simulated execution
+    return simulate_execution(request)
 
 
 # ═══════════════════════════════════════════════
@@ -385,3 +400,154 @@ async def workspace_shell(req: ShellRequest):
         return {"stdout": "", "stderr": "Shell not available.", "exit_code": 127, "duration_ms": 0}
     except subprocess.TimeoutExpired:
         return {"stdout": "", "stderr": f"Timed out after {SHELL_TIMEOUT_SECONDS}s.", "exit_code": 124, "duration_ms": SHELL_TIMEOUT_SECONDS * 1000}
+
+
+# ═══════════════════════════════════════════════
+#   GITHUB PROJECT IMPORT
+# ═══════════════════════════════════════════════
+
+class GitHubImportRequest(BaseModel):
+    repo_url: str  # e.g. "https://github.com/user/repo" or "user/repo"
+    branch: str = "main"
+
+
+def _parse_github_url(url: str) -> tuple[str, str] | None:
+    """Extract owner/repo from GitHub URL or shorthand."""
+    url = url.strip().rstrip("/")
+    # Handle full URLs
+    if "github.com/" in url:
+        parts = url.split("github.com/")[-1].split("/")
+        if len(parts) >= 2:
+            owner = parts[0]
+            repo = parts[1].replace(".git", "")
+            return (owner, repo)
+    # Handle shorthand "user/repo"
+    elif "/" in url and not url.startswith("http"):
+        parts = url.split("/")
+        if len(parts) == 2:
+            return (parts[0], parts[1].replace(".git", ""))
+    return None
+
+
+TEXT_EXTENSIONS = {
+    ".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".java", ".c", ".cpp", ".h",
+    ".hpp", ".rs", ".rb", ".php", ".swift", ".sh", ".bash", ".html", ".htm",
+    ".css", ".scss", ".less", ".json", ".xml", ".yaml", ".yml", ".toml",
+    ".md", ".txt", ".env", ".gitignore", ".dockerignore", ".editorconfig",
+    ".prettierrc", ".eslintrc", ".babelrc", ".lock", ".cfg", ".ini", ".conf",
+    ".sql", ".graphql", ".vue", ".svelte", ".astro", ".prisma",
+}
+MAX_CONTENT_SIZE = 256 * 1024  # 256 KB
+
+
+def _collect_tree(root: Path, base: Path) -> list[dict]:
+    """Recursively collect file tree for API response, including text file content."""
+    entries = []
+    try:
+        for item in sorted(root.iterdir()):
+            # Skip hidden dirs / node_modules / .git
+            if item.name.startswith(".") or item.name in ("node_modules", "__pycache__", ".git"):
+                continue
+            rel = str(item.relative_to(base))
+            if item.is_dir():
+                entries.append({
+                    "name": item.name,
+                    "path": rel,
+                    "type": "folder",
+                    "children": _collect_tree(item, base),
+                })
+            else:
+                entry: dict = {
+                    "name": item.name,
+                    "path": rel,
+                    "type": "file",
+                    "size": item.stat().st_size,
+                }
+                # Include content for small text files
+                ext = item.suffix.lower()
+                if ext in TEXT_EXTENSIONS and item.stat().st_size < MAX_CONTENT_SIZE:
+                    try:
+                        entry["content"] = item.read_text(encoding="utf-8", errors="replace")
+                    except Exception:
+                        pass
+                entries.append(entry)
+    except PermissionError:
+        pass
+    return entries
+
+
+@app.post("/workspace/import-github")
+async def workspace_import_github(req: GitHubImportRequest):
+    """Import a GitHub repository into the workspace via ZIP download."""
+    parsed = _parse_github_url(req.repo_url)
+    if not parsed:
+        return {"success": False, "error": "Invalid GitHub URL. Use 'user/repo' or full URL."}
+
+    owner, repo = parsed
+    zip_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{req.branch}.zip"
+
+    try:
+        import urllib.request
+        import zipfile
+        import io
+
+        # Download the ZIP archive
+        try:
+            response = urllib.request.urlopen(zip_url, timeout=30)
+            zip_data = response.read()
+        except Exception as e:
+            # Try 'master' branch as fallback
+            if req.branch == "main":
+                zip_url_master = f"https://github.com/{owner}/{repo}/archive/refs/heads/master.zip"
+                try:
+                    response = urllib.request.urlopen(zip_url_master, timeout=30)
+                    zip_data = response.read()
+                except Exception:
+                    return {"success": False, "error": f"Could not download repo: {e}"}
+            else:
+                return {"success": False, "error": f"Could not download repo: {e}"}
+
+        # Clear workspace and extract
+        for item in WORKSPACE_ROOT.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            # GitHub ZIPs have a root folder like "repo-main/"
+            # We want to extract contents without that wrapper
+            root_prefix = ""
+            for name in zf.namelist():
+                if "/" in name:
+                    root_prefix = name.split("/")[0] + "/"
+                    break
+
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                # Strip the root prefix
+                rel_path = info.filename
+                if root_prefix and rel_path.startswith(root_prefix):
+                    rel_path = rel_path[len(root_prefix):]
+                if not rel_path:
+                    continue
+
+                target = WORKSPACE_ROOT / rel_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info) as src:
+                    target.write_bytes(src.read())
+
+        # Collect the file tree to return
+        tree = _collect_tree(WORKSPACE_ROOT, WORKSPACE_ROOT)
+
+        return {
+            "success": True,
+            "repo": f"{owner}/{repo}",
+            "branch": req.branch,
+            "files": tree,
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+

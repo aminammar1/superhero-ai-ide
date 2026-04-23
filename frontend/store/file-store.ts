@@ -59,6 +59,18 @@ interface FileStore {
   renameNode: (id: string, name: string) => void;
   updateFileContent: (id: string, content: string) => void;
   getFileById: (id: string) => FileNode | undefined;
+  /** Replace entire tree from GitHub import (backend supplies content) */
+  loadFromImportTree: (tree: ImportEntry[]) => void;
+}
+
+/** Shape returned by the executor import-github endpoint */
+export interface ImportEntry {
+  name: string;
+  path: string;
+  type: "file" | "folder";
+  size?: number;
+  content?: string;
+  children?: ImportEntry[];
 }
 
 function findNode(nodes: FileNode[], id: string): FileNode | undefined {
@@ -186,6 +198,36 @@ export const useFileStore = create<FileStore>()(
           files: updateNode(state.files, id, (n) => ({ ...n, content })),
         })),
       getFileById: (id) => findNode(get().files, id),
+
+      loadFromImportTree: (tree) => {
+        const convertTree = (entries: ImportEntry[], parentId: string | null): FileNode[] => {
+          return entries.map((entry) => {
+            const id = crypto.randomUUID();
+            if (entry.type === "folder") {
+              return {
+                id,
+                name: entry.name,
+                type: "folder" as const,
+                parentId,
+                children: entry.children ? convertTree(entry.children, id) : [],
+              };
+            }
+            return {
+              id,
+              name: entry.name,
+              type: "file" as const,
+              parentId,
+              language: detectLanguage(entry.name),
+              content: entry.content ?? "",
+            };
+          });
+        };
+
+        const files = convertTree(tree, null);
+        // Auto-expand top-level folders
+        const topFolders = new Set(files.filter((f) => f.type === "folder").map((f) => f.id));
+        set({ files, activeFileId: null, expandedFolders: topFolders });
+      },
     }),
     {
       name: "superhero-fs-storage-v2",
