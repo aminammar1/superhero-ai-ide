@@ -1,4 +1,7 @@
-# Skill: ui-master
+---
+name: ui-master
+description: A skill for applying modern UI best practices to this superhero IDE while protecting product identity.
+---
 
 ## Purpose
 Apply modern UI best practices to this superhero IDE while protecting product identity.

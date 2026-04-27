@@ -1,10 +1,13 @@
-# Skill: info-superhero
+---
+name: superhero-knowledge
+description: A skill for providing reliable hero context for the SuperHero AI IDE so generated UI and copy stay on theme.
+---
 
 ## Purpose
 Provide reliable hero context for this IDE so generated UI and copy stay on theme.
 
 ## Heroes
-1. Spider Man
+1. Spider-Man
 Identity: Peter Parker
 Tone: witty, fast, youthful, optimistic under pressure.
 Palette anchor: red, blue, black web accents.

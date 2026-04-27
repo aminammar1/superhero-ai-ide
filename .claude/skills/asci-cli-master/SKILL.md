@@ -1,4 +1,7 @@
-# Skill: ascii-cli-master
+---
+name: asci-cli-master
+description: A skill for generating high-quality ASCII art and terminal visuals for the SuperHero AI IDE
+---
 
 ## Purpose
 Generate high-quality ASCII art and terminal visuals for the SuperHero AI IDE terminal boot screens and CLI branding.
