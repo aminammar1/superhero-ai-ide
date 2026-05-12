@@ -26,7 +26,7 @@ async def request_json(
     authorization: str | None = None,
 ):
     headers = {"Authorization": authorization} if authorization else {}
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=90.0) as client:
         response = await client.request(method, url, json=payload, headers=headers)
     if response.is_error:
         raise HTTPException(response.status_code, response.text)
@@ -261,7 +261,7 @@ async def workspace_delete(path: str):
 @app.post("/api/workspace/shell")
 async def workspace_shell(payload: dict):
     """Shell commands need a longer timeout (npm install etc.)."""
-    async with httpx.AsyncClient(timeout=180.0) as client:
+    async with httpx.AsyncClient(timeout=660.0) as client:
         response = await client.post(
             f"{settings.executor_service_url}/workspace/shell",
             json=payload,
@@ -274,7 +274,7 @@ async def workspace_shell(payload: dict):
 @app.post("/api/workspace/import-github")
 async def workspace_import_github(payload: dict):
     """Import a GitHub repo into the workspace (may take time to download)."""
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             f"{settings.executor_service_url}/workspace/import-github",
             json=payload,

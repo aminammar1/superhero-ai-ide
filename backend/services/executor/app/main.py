@@ -17,8 +17,11 @@ app = FastAPI(title="SuperHero Executor Service", version="0.1.0")
 WORKSPACE_ROOT = Path("/tmp/hero-workspace")
 WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
 
-# Shell commands need much longer timeout than code execution (npm install etc.)
-SHELL_TIMEOUT_SECONDS = 120
+SHELL_TIMEOUT_SECONDS = 300
+NPM_TIMEOUT_SECONDS = 600
+
+PACKAGE_MANAGER_CMDS = frozenset({"npm", "npx", "yarn", "pnpm", "pip", "pip3", "go", "cargo", "mvn", "gradle"})
+LONG_RUNNING_ARGS = frozenset({"install", "i", "ci", "build", "run", "dev", "start", "serve"})
 
 
 class ExecuteRequest(BaseModel):
@@ -376,30 +379,137 @@ async def workspace_delete(path: str):
     return {"success": True}
 
 
+DEV_SERVER_PATTERNS = frozenset({"dev", "start", "serve", "watch", "preview"})
+
+_bg_processes: dict[int, subprocess.Popen] = {}
+
+
+def _is_dev_server_cmd(cmd_parts: list[str]) -> bool:
+    if not cmd_parts:
+        return False
+    base = cmd_parts[0].lower()
+    args_lower = [a.lower() for a in cmd_parts[1:]]
+    if base in ("npm", "npx", "yarn", "pnpm"):
+        return any(a in DEV_SERVER_PATTERNS for a in args_lower)
+    if base in ("python", "python3") and any("flask" in a or "uvicorn" in a or "manage.py" in a for a in args_lower):
+        return True
+    if base == "go" and "run" in args_lower:
+        return True
+    if base == "node" and len(cmd_parts) > 1:
+        return True
+    return False
+
+
 @app.post("/workspace/shell")
 async def workspace_shell(req: ShellRequest):
-    """Run a shell command inside the workspace directory."""
     try:
+        cmd_parts = req.command.strip().split()
+        base_cmd = cmd_parts[0].lower() if cmd_parts else ""
+        has_long_arg = any(a in LONG_RUNNING_ARGS for a in cmd_parts[1:])
+        is_pkg_manager = base_cmd in PACKAGE_MANAGER_CMDS
+        is_dev_server = _is_dev_server_cmd(cmd_parts)
+
+        env = os.environ.copy()
+        env["HOME"] = str(WORKSPACE_ROOT)
+        env["NODE_ENV"] = "development"
+        env["CI"] = "true"
+        env["NPM_CONFIG_YES"] = "true"
+        npm_global = WORKSPACE_ROOT / ".npm-global" / "bin"
+        npm_global.mkdir(parents=True, exist_ok=True)
+        if "PATH" in env:
+            env["PATH"] = f"{npm_global}:/usr/local/bin:/usr/bin:/bin:{env['PATH']}"
+
+        wrap = req.command
+        if is_pkg_manager and base_cmd in ("npm", "npx", "yarn", "pnpm"):
+            wrap = f"export HOME={WORKSPACE_ROOT} && {req.command}"
+
+        if is_dev_server:
+            proc = subprocess.Popen(
+                ["sh", "-c", wrap],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=str(WORKSPACE_ROOT),
+                env=env,
+            )
+            _bg_processes[proc.pid] = proc
+
+            import select
+            output_lines = []
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                if proc.stdout and proc.stdout.fileno():
+                    ready, _, _ = select.select([proc.stdout], [], [], min(remaining, 0.5))
+                    if ready:
+                        line = proc.stdout.readline()
+                        if line:
+                            output_lines.append(line)
+                        else:
+                            break
+                    else:
+                        if output_lines:
+                            break
+                else:
+                    time.sleep(0.3)
+
+            ret = proc.poll()
+            captured = "".join(output_lines)
+
+            if ret is not None and ret != 0:
+                rest = proc.stdout.read() if proc.stdout else ""
+                return {
+                    "stdout": captured + rest,
+                    "stderr": "",
+                    "exit_code": ret,
+                    "duration_ms": 0,
+                }
+
+            url_hint = ""
+            for line in output_lines:
+                ll = line.lower()
+                if "http://" in ll or "https://" in ll or "localhost" in ll:
+                    url_hint = line.strip()
+                    break
+
+            status = f"Server started (PID {proc.pid})"
+            if url_hint:
+                status += f"\n{url_hint}"
+            else:
+                status += "\nProcess is running in the background."
+
+            return {
+                "stdout": f"{captured}\n── {status} ──\n",
+                "stderr": "",
+                "exit_code": 0,
+                "duration_ms": 0,
+            }
+
+        timeout = NPM_TIMEOUT_SECONDS if (is_pkg_manager and has_long_arg) else SHELL_TIMEOUT_SECONDS
+
         started = time.perf_counter()
         completed = subprocess.run(
-            ["sh", "-c", req.command],
+            ["sh", "-c", wrap],
             capture_output=True,
             text=True,
-            timeout=SHELL_TIMEOUT_SECONDS,
+            timeout=timeout,
             cwd=str(WORKSPACE_ROOT),
+            env=env,
             check=False,
         )
         duration_ms = int((time.perf_counter() - started) * 1000)
         return {
-            "stdout": completed.stdout,
-            "stderr": completed.stderr,
+            "stdout": completed.stdout[-8000:] if len(completed.stdout) > 8000 else completed.stdout,
+            "stderr": completed.stderr[-4000:] if len(completed.stderr) > 4000 else completed.stderr,
             "exit_code": completed.returncode,
             "duration_ms": duration_ms,
         }
     except FileNotFoundError:
         return {"stdout": "", "stderr": "Shell not available.", "exit_code": 127, "duration_ms": 0}
     except subprocess.TimeoutExpired:
-        return {"stdout": "", "stderr": f"Timed out after {SHELL_TIMEOUT_SECONDS}s.", "exit_code": 124, "duration_ms": SHELL_TIMEOUT_SECONDS * 1000}
+        return {"stdout": "", "stderr": f"Timed out after {timeout}s. Try breaking the command into smaller steps.", "exit_code": 124, "duration_ms": timeout * 1000}
 
 
 # ═══════════════════════════════════════════════

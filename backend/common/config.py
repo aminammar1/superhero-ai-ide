@@ -63,34 +63,37 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("OPENROUTER_API_KEY"),
     )
     openrouter_model: str = Field(
-        default="qwen/qwen3.6-plus:free",
+        default="qwen/qwen3-coder:free",
         validation_alias=AliasChoices("OPENROUTER_MODEL", "OEPNROUTER_MODEL"),
     )
     openrouter_chat_models: str = Field(
         default=(
+            "qwen/qwen3-coder:free,"
+            "nvidia/nemotron-3-super-120b-a12b:free,"
             "zai-org/glm-5:free,"
             "google/gemma-4-31b-it:free,"
-            "minimax/minimax-m2.5:free,"
-            "openai/gpt-oss-20b:free,"
-            "openai/gpt-oss-120b:free,"
-            "meta-llama/llama-3.3-70b-instruct:free,"
+            "baidu/cobuddy:free,"
+            "deepseek/deepseek-r1:free,"
             "nvidia/nemotron-3-nano-30b-a3b:free,"
-            "qwen/qwen3-coder:free,"
-            "deepseek/deepseek-r1:free"
+            "minimax/minimax-m2.5:free,"
+            "openai/gpt-oss-120b:free,"
+            "openai/gpt-oss-20b:free,"
+            "meta-llama/llama-3.3-70b-instruct:free"
         ),
         validation_alias=AliasChoices("OPENROUTER_CHAT_MODELS"),
     )
     openrouter_code_models: str = Field(
         default=(
-            "zai-org/glm-5:free,"
-            "google/gemma-4-31b-it:free,"
-            "minimax/minimax-m2.5:free,"
-            "openai/gpt-oss-20b:free,"
-            "openai/gpt-oss-120b:free,"
-            "meta-llama/llama-3.3-70b-instruct:free,"
-            "nvidia/nemotron-3-nano-30b-a3b:free,"
             "qwen/qwen3-coder:free,"
-            "deepseek/deepseek-r1:free"
+            "nvidia/nemotron-3-super-120b-a12b:free,"
+            "zai-org/glm-5:free,"
+            "baidu/cobuddy:free,"
+            "google/gemma-4-31b-it:free,"
+            "deepseek/deepseek-r1:free,"
+            "nvidia/nemotron-3-nano-30b-a3b:free,"
+            "openai/gpt-oss-120b:free,"
+            "minimax/minimax-m2.5:free,"
+            "meta-llama/llama-3.3-70b-instruct:free"
         ),
         validation_alias=AliasChoices("OPENROUTER_CODE_MODELS"),
     )
@@ -115,7 +118,7 @@ class Settings(BaseSettings):
     google_client_secret: str | None = None
 
     enable_docker_sandbox: bool = False
-    docker_timeout_seconds: int = 30
+    docker_timeout_seconds: int = 90
 
 
 @lru_cache

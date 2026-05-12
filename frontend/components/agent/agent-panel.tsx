@@ -330,32 +330,38 @@ export function AgentPanel() {
     if (isListening) stopVoice();
   }, [isListening, setTranscript, stopVoice, voiceMode]);
 
-  // Process approved actions — instant execution, no artificial delay
+  const processedRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    const approved = pendingActions.filter((a) => a.status === "approved");
+    const approved = pendingActions.filter((a) => a.status === "approved" && !processedRef.current.has(a.id));
     if (approved.length === 0) return;
-    setHeroAnimation("processing");
-    const msgId = crypto.randomUUID();
-    const indicators: ActionIndicator[] = approved.map((a) => ({
-      type: toolToActionType(a.toolCall.tool), label: toolToLabel(a.toolCall.tool),
-      fileName: a.toolCall.args.path || a.toolCall.args.name, status: "running" as const,
-    }));
-    pushActionMessage(msgId, indicators);
-    // Execute all immediately — no setTimeout/await delays
-    for (let i = 0; i < approved.length; i++) {
-      useAgentStore.getState().setActionStatus(approved[i].id, "executing");
-      const result = executeToolCall(approved[i].toolCall);
-      if (result.success) {
-        useAgentStore.getState().setActionStatus(approved[i].id, "done", result.message);
-        updateActionStatus(msgId, i, "done");
-        addTaskContext(`${approved[i].toolCall.tool}: ${approved[i].toolCall.args.path || ""}`);
-      } else {
-        useAgentStore.getState().setActionStatus(approved[i].id, "error", undefined, result.message);
-        updateActionStatus(msgId, i, "error");
+    const timer = setTimeout(() => {
+      const fresh = pendingActions.filter((a) => a.status === "approved" && !processedRef.current.has(a.id));
+      if (fresh.length === 0) return;
+      fresh.forEach(a => processedRef.current.add(a.id));
+      setHeroAnimation("processing");
+      const msgId = crypto.randomUUID();
+      const indicators: ActionIndicator[] = fresh.map((a) => ({
+        type: toolToActionType(a.toolCall.tool), label: toolToLabel(a.toolCall.tool),
+        fileName: a.toolCall.args.path || a.toolCall.args.name, status: "running" as const,
+      }));
+      pushActionMessage(msgId, indicators);
+      for (let i = 0; i < fresh.length; i++) {
+        useAgentStore.getState().setActionStatus(fresh[i].id, "executing");
+        const result = executeToolCall(fresh[i].toolCall);
+        if (result.success) {
+          useAgentStore.getState().setActionStatus(fresh[i].id, "done", result.message);
+          updateActionStatus(msgId, i, "done");
+          addTaskContext(`${fresh[i].toolCall.tool}: ${fresh[i].toolCall.args.path || ""}`);
+        } else {
+          useAgentStore.getState().setActionStatus(fresh[i].id, "error", undefined, result.message);
+          updateActionStatus(msgId, i, "error");
+        }
       }
-    }
-    setHeroAnimation("success");
-    setTimeout(() => setHeroAnimation("idle"), 800);
+      setHeroAnimation("success");
+      setTimeout(() => setHeroAnimation("idle"), 800);
+    }, 100);
+    return () => clearTimeout(timer);
   }, [pendingActions, setHeroAnimation, pushActionMessage, updateActionStatus, addTaskContext]);
 
   const toggleMic = () => { if (!usesVoiceInput) return; isListening ? stopVoice() : startVoice(); };
@@ -474,7 +480,10 @@ export function AgentPanel() {
             <JarvisWelcome theme={theme} onSuggestion={(t) => setChatInput(t)} />
           ) : (
             <div className="space-y-2.5">
-              {messages.map((msg) => <ChatMessageBubble key={msg.id} message={msg} theme={theme} />)}
+              {messages.map((msg, idx) => {
+                const isLastAssistant = isStreamingChat && msg.role === "assistant" && idx === messages.length - 1;
+                return <ChatMessageBubble key={msg.id} message={msg} theme={theme} isStreaming={isLastAssistant} />;
+              })}
               <div ref={scrollRef} />
             </div>
           )}

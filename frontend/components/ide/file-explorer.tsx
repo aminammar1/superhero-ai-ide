@@ -131,6 +131,14 @@ export function FileExplorer() {
   const [showImport, setShowImport] = useState(false);
   const [importUrl, setImportUrl] = useState("");
   const [importing, setImporting] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const handleClearWorkspace = useCallback(() => {
+    useFileStore.setState({ files: [], activeFileId: null, expandedFolders: new Set() });
+    setCode("");
+    setShowClearConfirm(false);
+    toast.success("Workspace cleared");
+  }, [setCode]);
 
   const openCreateInput = (parentId: string | null, type: "file" | "folder") => {
     setInputValue("");
@@ -296,6 +304,16 @@ export function FileExplorer() {
           WORKSPACE
         </span>
         <div className="flex gap-0.5">
+          {files.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowClearConfirm(true)}
+              className="flex h-5 w-5 items-center justify-center rounded text-white/20 hover:bg-red-500/10 hover:text-red-400/60 transition"
+              title="Clear workspace"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowImport(true)}
@@ -497,6 +515,51 @@ export function FileExplorer() {
                 )}
                 {importing ? "Importing..." : "Import Repository"}
               </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Clear Workspace Confirmation */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowClearConfirm(false)}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed left-1/2 top-1/2 z-50 w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/[0.08] bg-[#0c0c12]/98 p-5 backdrop-blur-2xl shadow-[0_12px_48px_rgba(0,0,0,0.6)]"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Trash2 className="h-4 w-4 text-red-400/70" />
+                <span className="text-sm font-medium text-white/70">Clear Workspace</span>
+              </div>
+              <p className="text-[11px] text-white/40 mb-4">
+                This will remove all files and folders from the workspace. This action cannot be undone.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] py-2 text-xs text-white/50 transition hover:bg-white/[0.06]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearWorkspace}
+                  className="flex-1 rounded-lg border border-red-500/20 bg-red-500/10 py-2 text-xs font-medium text-red-400/80 transition hover:bg-red-500/20"
+                >
+                  Clear All
+                </button>
+              </div>
             </motion.div>
           </>
         )}

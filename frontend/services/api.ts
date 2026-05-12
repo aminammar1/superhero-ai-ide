@@ -152,7 +152,7 @@ export async function shellCommand(command: string): Promise<{
     stderr: string;
     exit_code: number;
     duration_ms: number;
-  }>("/api/workspace/shell", { command }, { timeout: 150_000 });
+  }>("/api/workspace/shell", { command }, { timeout: 650_000 });
   return response.data;
 }
 

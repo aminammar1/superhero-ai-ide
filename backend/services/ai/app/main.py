@@ -774,8 +774,19 @@ async def chat_stream(request: ChatRequest):
         final_text = local_chat_fallback(request)
 
     async def streamer() -> AsyncIterator[str]:
-        for chunk in final_text.split():
-            yield f"{chunk} "
-            await asyncio.sleep(0.008)
+        i = 0
+        length = len(final_text)
+        while i < length:
+            if final_text[i:i+6] == "[TOOL:":
+                end = final_text.find("]", i)
+                if end != -1:
+                    yield final_text[i:end+1]
+                    i = end + 1
+                    continue
+            chunk_size = 3 if final_text[i] in (" ", "\n") else 2
+            end = min(i + chunk_size, length)
+            yield final_text[i:end]
+            i = end
+            await asyncio.sleep(0.012)
 
     return StreamingResponse(streamer(), media_type="text/plain")
