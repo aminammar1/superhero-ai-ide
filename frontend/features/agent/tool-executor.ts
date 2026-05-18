@@ -185,7 +185,7 @@ function stripRanges(text: string, ranges: Array<{ start: number; end: number }>
 /* ────────────────────────────────────────────
    Execute approved tool calls
    ──────────────────────────────────────────── */
-export function executeToolCall(toolCall: AgentToolCall): { success: boolean; message: string } {
+export async function executeToolCall(toolCall: AgentToolCall): Promise<{ success: boolean; message: string }> {
   const fileStore = useFileStore.getState();
   const { tool, args } = toolCall;
 
@@ -232,7 +232,7 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
         }
 
         // Sync to backend workspace
-        void writeWorkspaceFile(path, content);
+        await writeWorkspaceFile(path, content);
 
         return { success: true, message: existingFile ? `Updated file: ${path}` : `Created file: ${path}` };
       }
@@ -268,7 +268,7 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
 
         fileStore.deleteNode(node.id);
         // Sync delete to backend workspace
-        void deleteWorkspaceFile(path);
+        await deleteWorkspaceFile(path);
         return { success: true, message: `Deleted: ${path}` };
       }
 
@@ -280,7 +280,7 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
 
         let node = findNodeByPath(fileStore.files, path);
         if (!node) {
-          const createResult = executeToolCall({
+          const createResult = await executeToolCall({
             ...toolCall,
             tool: "create_file",
             args: { ...args, path, content },
@@ -293,7 +293,7 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
         fileStore.updateFileContent(node.id, content);
         fileStore.setActiveFile(node.id);
         // Sync to backend workspace
-        void writeWorkspaceFile(path, content);
+        await writeWorkspaceFile(path, content);
         return { success: true, message: `Modified: ${path}` };
       }
 

@@ -245,6 +245,15 @@ async def workspace_list(path: str = ""):
     return JSONResponse(content=response.json())
 
 
+@app.get("/api/workspace/tree")
+async def workspace_tree():
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(f"{settings.executor_service_url}/workspace/tree")
+    if response.is_error:
+        raise HTTPException(response.status_code, response.text)
+    return JSONResponse(content=response.json())
+
+
 @app.delete("/api/workspace/delete")
 async def workspace_delete(path: str):
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -282,4 +291,3 @@ async def workspace_import_github(payload: dict):
     if response.is_error:
         raise HTTPException(response.status_code, response.text)
     return JSONResponse(content=response.json())
-

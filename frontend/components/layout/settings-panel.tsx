@@ -84,6 +84,7 @@ export function SettingsPanel({
                       src={hero.asset}
                       alt={hero.name}
                       fill
+                      sizes="40px"
                       className="object-cover"
                     />
                   </div>
@@ -132,6 +133,7 @@ export function SettingsPanel({
                           src={h.asset}
                           alt={h.name}
                           fill
+                          sizes="32px"
                           className="object-cover"
                         />
                       </div>

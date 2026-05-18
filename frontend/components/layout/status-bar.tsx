@@ -43,7 +43,7 @@ export function StatusBar() {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1.5">
           <div className="relative h-4 w-4 overflow-hidden rounded-full border border-white/10">
-            <Image src={hero.asset} alt={hero.name} fill className="object-cover" />
+            <Image src={hero.asset} alt={hero.name} fill sizes="16px" className="object-cover" />
           </div>
           <span className="text-white/40">{hero.name}</span>
         </div>

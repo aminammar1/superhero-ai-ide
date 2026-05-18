@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Terminal as TerminalIcon, ChevronRight, Zap, Cpu, Activity } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { shellCommand } from "@/services/api";
+import { scanWorkspaceTree, shellCommand } from "@/services/api";
 import { useAppStore } from "@/store/app-store";
+import { useFileStore } from "@/store/file-store";
 import type { HeroTheme } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -386,6 +387,14 @@ export function TerminalOutput() {
           };
           return updated;
         });
+        try {
+          const workspace = await scanWorkspaceTree();
+          if (workspace.success && workspace.files) {
+            useFileStore.getState().refreshFromImportTree(workspace.files);
+          }
+        } catch {
+          // The command result is still useful if workspace refresh is temporarily unavailable.
+        }
       } catch (err) {
         setCmdHistory(prev => {
           const updated = [...prev];

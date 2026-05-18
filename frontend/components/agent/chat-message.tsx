@@ -250,7 +250,7 @@ export function ChatMessageBubble({
     return (
       <div className="flex gap-2">
         <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-xl border border-white/[0.08] mt-0.5">
-          <Image src={hero.asset} alt={hero.name} fill className="object-cover" />
+          <Image src={hero.asset} alt={hero.name} fill sizes="24px" className="object-cover" />
         </div>
         <JarvisStreamingHud color={color} />
       </div>
@@ -262,7 +262,7 @@ export function ChatMessageBubble({
       <div className="flex gap-2">
         <div className="flex flex-col items-center ml-1">
           <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-xl border border-white/[0.08]">
-            <Image src={hero.asset} alt={hero.name} fill className="object-cover" />
+            <Image src={hero.asset} alt={hero.name} fill sizes="24px" className="object-cover" />
           </div>
           <motion.div className="w-[1px] flex-1 mt-1"
             style={{ background: `linear-gradient(180deg, ${color}15, transparent)` }}
@@ -277,7 +277,7 @@ export function ChatMessageBubble({
     return (
       <div className="flex gap-2">
         <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-xl border border-white/[0.08] mt-0.5">
-          <Image src={hero.asset} alt={hero.name} fill className="object-cover" />
+          <Image src={hero.asset} alt={hero.name} fill sizes="24px" className="object-cover" />
         </div>
         {streamMode === "task" || hasToolContent ? <JarvisStreamingHud color={color} /> : <ChatTypingIndicator color={color} />}
       </div>
@@ -288,7 +288,7 @@ export function ChatMessageBubble({
     <div className={cn("flex gap-2", !isAssistant && "justify-end")}>
       {isAssistant && (
         <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-xl border border-white/[0.08] mt-0.5">
-          <Image src={hero.asset} alt={hero.name} fill className="object-cover" />
+          <Image src={hero.asset} alt={hero.name} fill sizes="24px" className="object-cover" />
         </div>
       )}
       <div className="flex flex-col gap-1 max-w-[82%]">

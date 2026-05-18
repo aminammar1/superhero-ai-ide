@@ -184,3 +184,14 @@ export async function importGitHubRepo(repoUrl: string, branch = "main") {
   return response.data;
 }
 
+/**
+ * Read the backend workspace tree after terminal commands mutate files.
+ */
+export async function scanWorkspaceTree() {
+  const response = await http.get<{
+    success: boolean;
+    files?: ImportEntry[];
+    error?: string;
+  }>("/api/workspace/tree");
+  return response.data;
+}

@@ -52,7 +52,7 @@ export function TopBar() {
 
           <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1">
             <div className="relative h-6 w-6 overflow-hidden rounded-full border border-white/10">
-              <Image src={hero.asset} alt={hero.name} fill className="object-cover" />
+              <Image src={hero.asset} alt={hero.name} fill sizes="24px" className="object-cover" />
             </div>
             <span className="text-xs text-white/60">{profile?.username || "Hero"}</span>
           </div>

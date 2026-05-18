@@ -3,8 +3,9 @@
 import dynamic from "next/dynamic";
 import type { Language, HeroTheme } from "@/lib/types";
 import type { editor } from "monaco-editor";
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useAppStore } from "@/store/app-store";
+import { useFileStore, type FileNode } from "@/store/file-store";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
@@ -228,18 +229,128 @@ function getHeroThemeName(theme: HeroTheme): string {
   return `hero-${theme}`;
 }
 
+const PROJECT_TYPES_URI = "ts:filename/superhero-workspace-dependencies.d.ts";
+
+function walkFiles(nodes: FileNode[], visitor: (node: FileNode) => void) {
+  for (const node of nodes) {
+    visitor(node);
+    if (node.children) walkFiles(node.children, visitor);
+  }
+}
+
+function collectPackageDependencies(files: FileNode[]): string[] {
+  const dependencies = new Set<string>();
+
+  walkFiles(files, (node) => {
+    if (node.type !== "file" || node.name !== "package.json" || !node.content) return;
+    try {
+      const parsed = JSON.parse(node.content) as Record<string, unknown>;
+      for (const section of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+        const values = parsed[section];
+        if (!values || typeof values !== "object" || Array.isArray(values)) continue;
+        for (const name of Object.keys(values)) {
+          dependencies.add(name);
+        }
+      }
+    } catch {
+      // Keep editor diagnostics alive while package.json is temporarily invalid.
+    }
+  });
+
+  return [...dependencies].sort((a, b) => a.localeCompare(b));
+}
+
+function buildWorkspaceTypeDeclarations(files: FileNode[]): string {
+  const dependencies = collectPackageDependencies(files);
+  const moduleDeclarations = dependencies
+    .map((dependency) => {
+      const escaped = dependency.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      return `declare module "${escaped}";\ndeclare module "${escaped}/*";`;
+    })
+    .join("\n");
+
+  return `
+declare module "*.css";
+declare module "*.scss";
+declare module "*.sass";
+declare module "*.less";
+declare module "*.svg" { const src: string; export default src; }
+declare module "*.png" { const src: string; export default src; }
+declare module "*.jpg" { const src: string; export default src; }
+declare module "*.jpeg" { const src: string; export default src; }
+declare module "*.gif" { const src: string; export default src; }
+declare module "*.webp" { const src: string; export default src; }
+declare namespace JSX { interface IntrinsicElements { [elemName: string]: any; } }
+${moduleDeclarations}
+`;
+}
+
+function collectWorkspaceEditorFiles(files: FileNode[]) {
+  const editorFiles: Array<{ path: string; language: string; content: string }> = [];
+
+  const visit = (nodes: FileNode[], parentPath = "") => {
+    for (const node of nodes) {
+      const path = parentPath ? `${parentPath}/${node.name}` : node.name;
+      if (node.type === "file" && node.content !== undefined && node.language) {
+        const language = languageMap[node.language];
+        if (language && ["typescript", "javascript", "json", "css", "html"].includes(language)) {
+          editorFiles.push({ path, language, content: node.content });
+        }
+      }
+      if (node.children) visit(node.children, path);
+    }
+  };
+
+  visit(files);
+  return editorFiles;
+}
+
+function toWorkspaceUri(path: string): string {
+  return `file:///${path.replace(/^\/+/, "")}`;
+}
+
 export function CodeEditor({
   language,
+  path,
   value,
   onChange
 }: {
   language: Language;
+  path: string | null;
   value: string;
   onChange: (value: string) => void;
 }) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
+  const projectTypesRef = useRef<Array<{ dispose: () => void }>>([]);
   const theme = useAppStore((s) => s.theme);
+  const files = useFileStore((s) => s.files);
+  const projectTypes = useMemo(() => buildWorkspaceTypeDeclarations(files), [files]);
+  const workspaceEditorFiles = useMemo(() => collectWorkspaceEditorFiles(files), [files]);
+  const editorPath = path ? toWorkspaceUri(path) : `file:///untitled.${languageMap[language]}`;
+
+  const syncProjectTypes = useCallback((monaco: typeof import("monaco-editor")) => {
+    for (const disposable of projectTypesRef.current) {
+      disposable.dispose();
+    }
+    projectTypesRef.current = [
+      monaco.languages.typescript.typescriptDefaults.addExtraLib(projectTypes, PROJECT_TYPES_URI),
+      monaco.languages.typescript.javascriptDefaults.addExtraLib(projectTypes, PROJECT_TYPES_URI),
+    ];
+
+    for (const workspaceFile of workspaceEditorFiles) {
+      const uri = monaco.Uri.parse(toWorkspaceUri(workspaceFile.path));
+      const model = monaco.editor.getModel(uri);
+      if (workspaceFile.path === path) continue;
+      if (model) {
+        if (model.getValue() !== workspaceFile.content) {
+          model.setValue(workspaceFile.content);
+        }
+        continue;
+      }
+      monaco.editor.createModel(workspaceFile.content, workspaceFile.language, uri);
+    }
+  }, [path, projectTypes, workspaceEditorFiles]);
 
   const handleEditorMount = useCallback((ed: editor.IStandaloneCodeEditor, monaco: typeof import("monaco-editor")) => {
     editorRef.current = ed;
@@ -252,6 +363,16 @@ export function CodeEditor({
 
     // Set the current theme
     monaco.editor.setTheme(getHeroThemeName(theme));
+    monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+      allowNonTsExtensions: true,
+      esModuleInterop: true,
+      jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+      module: monaco.languages.typescript.ModuleKind.ESNext,
+      moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+      resolveJsonModule: true,
+      target: monaco.languages.typescript.ScriptTarget.Latest,
+    });
+    syncProjectTypes(monaco);
 
     // Register Ctrl+Shift+F / Cmd+Shift+F to format document
     ed.addAction({
@@ -265,7 +386,7 @@ export function CodeEditor({
         editor.getAction("editor.action.formatDocument")?.run();
       },
     });
-  }, [theme]);
+  }, [syncProjectTypes, theme]);
 
   // Switch theme when hero changes
   useEffect(() => {
@@ -274,9 +395,16 @@ export function CodeEditor({
     }
   }, [theme]);
 
+  useEffect(() => {
+    if (monacoRef.current) {
+      syncProjectTypes(monacoRef.current);
+    }
+  }, [syncProjectTypes]);
+
   return (
     <MonacoEditor
       height="100%"
+      path={editorPath}
       language={languageMap[language]}
       value={value}
       onChange={(updated) => onChange(updated ?? "")}

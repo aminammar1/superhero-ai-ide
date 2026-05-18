@@ -6,9 +6,9 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { CodeEditor } from "@/components/ide/code-editor";
 import { TerminalOutput } from "@/components/ide/terminal-output";
-import { runCode } from "@/services/api";
+import { runCode, writeWorkspaceFile } from "@/services/api";
 import { useAppStore } from "@/store/app-store";
-import { useFileStore } from "@/store/file-store";
+import { useFileStore, type FileNode } from "@/store/file-store";
 import type { Language } from "@/lib/types";
 
 const LANG_ICONS: Record<string, string> = {
@@ -29,6 +29,29 @@ const LANG_ICONS: Record<string, string> = {
   swift: "SW",
 };
 
+function findNodeById(nodes: FileNode[], id: string): FileNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    if (node.children) {
+      const found = findNodeById(node.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function findNodePath(nodes: FileNode[], id: string, parentPath = ""): string | null {
+  for (const node of nodes) {
+    const path = parentPath ? `${parentPath}/${node.name}` : node.name;
+    if (node.id === id) return path;
+    if (node.children) {
+      const found = findNodePath(node.children, id, path);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 export function EditorPanel() {
   const language = useAppStore((s) => s.language);
   const code = useAppStore((s) => s.code);
@@ -37,7 +60,9 @@ export function EditorPanel() {
   const setOutput = useAppStore((s) => s.setOutput);
   const setRunningCode = useAppStore((s) => s.setRunningCode);
   const activeFileId = useFileStore((s) => s.activeFileId);
-  const activeFile = activeFileId ? useFileStore.getState().getFileById(activeFileId) : null;
+  const files = useFileStore((s) => s.files);
+  const activeFile = activeFileId ? findNodeById(files, activeFileId) : null;
+  const activeFilePath = activeFileId ? findNodePath(files, activeFileId) : null;
   const updateFileContent = useFileStore((s) => s.updateFileContent);
   const setActiveFile = useFileStore((s) => s.setActiveFile);
 
@@ -53,6 +78,14 @@ export function EditorPanel() {
     }
     setCode(latest.content ?? "");
   }, [activeFileId, setCode]);
+
+  useEffect(() => {
+    if (!activeFilePath || !activeFile || activeFile.type !== "file") return;
+    const timeout = window.setTimeout(() => {
+      void writeWorkspaceFile(activeFilePath, code);
+    }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [activeFile, activeFilePath, code]);
 
   const displayLanguage = activeFile?.language || language;
 
@@ -156,7 +189,12 @@ export function EditorPanel() {
 
       {/* Code editor */}
       <div className="min-h-0 flex-1">
-        <CodeEditor language={displayLanguage} value={code} onChange={handleCodeChange} />
+        <CodeEditor
+          language={displayLanguage}
+          path={activeFilePath}
+          value={code}
+          onChange={handleCodeChange}
+        />
       </div>
 
       {/* Terminal */}

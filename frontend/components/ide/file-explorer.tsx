@@ -261,6 +261,7 @@ export function FileExplorer() {
                 src={hero.asset}
                 alt={hero.name}
                 fill
+                sizes="36px"
                 className="object-cover"
               />
             </div>

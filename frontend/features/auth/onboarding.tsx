@@ -124,6 +124,7 @@ export function OnboardingFlow() {
                   src={hero.asset}
                   alt={hero.name}
                   fill
+                  sizes="224px"
                   className="object-cover"
                   priority
                 />

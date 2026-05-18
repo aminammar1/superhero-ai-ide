@@ -71,6 +71,7 @@ export function AvatarStage({
             src={hero.asset}
             alt={hero.name}
             fill
+            sizes="48px"
             className="object-cover"
             priority
           />

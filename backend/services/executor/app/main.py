@@ -385,6 +385,12 @@ async def workspace_list(path: str = ""):
     return {"success": True, "entries": entries}
 
 
+@app.get("/workspace/tree")
+async def workspace_tree():
+    """Return the current workspace tree, including small text file contents."""
+    return {"success": True, "files": _collect_tree(WORKSPACE_ROOT, WORKSPACE_ROOT)}
+
+
 @app.delete("/workspace/delete")
 async def workspace_delete(path: str):
     """Delete a file or folder from the workspace."""

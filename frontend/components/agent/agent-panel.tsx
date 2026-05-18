@@ -348,7 +348,7 @@ export function AgentPanel() {
   useEffect(() => {
     const approved = pendingActions.filter((a) => a.status === "approved" && !processedRef.current.has(a.id));
     if (approved.length === 0) return;
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       const fresh = pendingActions.filter((a) => a.status === "approved" && !processedRef.current.has(a.id));
       if (fresh.length === 0) return;
       fresh.forEach(a => processedRef.current.add(a.id));
@@ -361,7 +361,7 @@ export function AgentPanel() {
       pushActionMessage(msgId, indicators);
       for (let i = 0; i < fresh.length; i++) {
         useAgentStore.getState().setActionStatus(fresh[i].id, "executing");
-        const result = executeToolCall(fresh[i].toolCall);
+        const result = await executeToolCall(fresh[i].toolCall);
         if (result.success) {
           useAgentStore.getState().setActionStatus(fresh[i].id, "done", result.message);
           updateActionStatus(msgId, i, "done");
@@ -441,7 +441,7 @@ export function AgentPanel() {
             fileName: tc.args.path || tc.args.name, status: "running" as const,
           })));
           for (let i = 0; i < autoTools.length; i++) {
-            const r = executeToolCall(autoTools[i]);
+            const r = await executeToolCall(autoTools[i]);
             updateActionStatus(toolMsgId, i, r.success ? "done" : "error");
           }
         }
