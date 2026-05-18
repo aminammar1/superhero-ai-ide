@@ -18,7 +18,7 @@ export const heroThemes: HeroThemeDefinition[] = [
     title: "Friendly Neighborhood Pair-Programmer",
     description:
       "High-energy gradients, kinetic accents, and web-grid overlays for fast iteration.",
-    asset: "/assets/spiderman-3D.jpg",
+    asset: "/assets/spiderman-3D.png",
     palette: ["#ef4444", "#2563eb", "#f97316"],
     ambientClass: "theme-spiderman",
     voiceLabel: "Youthful / energetic"
@@ -51,7 +51,7 @@ export const heroThemes: HeroThemeDefinition[] = [
     title: "Futuristic HUD Operator",
     description:
       "A glowing command deck with premium metal tones, technical overlays, and HUD readouts.",
-    asset: "/assets/ironmen-3D.jpg",
+    asset: "/assets/ironmen-3D.png",
     palette: ["#f59e0b", "#ef4444", "#f97316"],
     ambientClass: "theme-ironman",
     voiceLabel: "Witty / tech-forward"
