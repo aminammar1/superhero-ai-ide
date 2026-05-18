@@ -3,6 +3,7 @@
 import { useFileStore } from "@/store/file-store";
 import { useAgentStore, type AgentToolCall, type AgentToolName } from "@/store/agent-store";
 import { writeWorkspaceFile, deleteWorkspaceFile } from "@/services/api";
+import { normalizeGeneratedCode, normalizeWorkspacePath } from "@/lib/code-format";
 
 /* ────────────────────────────────────────────
    Parse agent response for tool calls
@@ -191,14 +192,13 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
   try {
     switch (tool) {
       case "create_file": {
-        const path = args.path || args.name;
+        const path = normalizeWorkspacePath(args.path || args.name || "");
         if (!path) return { success: false, message: "No file path specified" };
         const rawContent = args.content || toolCall.preview || "";
-        // Unescape \\n sequences from AI output
-        const content = rawContent.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+        const content = normalizeGeneratedCode(path, rawContent);
 
         // Determine parent folder and file name
-        const parts = path.split("/");
+        const parts = path.split("/").filter(Boolean);
         const fileName = parts.pop() || path;
         let parentId: string | null = null;
 
@@ -218,27 +218,31 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
           }
         }
 
-        fileStore.createNode(parentId, fileName, "file");
-
-        // If content was provided, update the file
-        if (content) {
+        const existingFile = findNodeByName(useFileStore.getState().files, fileName, parentId);
+        if (existingFile) {
+          fileStore.updateFileContent(existingFile.id, content);
+          fileStore.setActiveFile(existingFile.id);
+        } else {
+          fileStore.createNode(parentId, fileName, "file");
           const newFile = findNodeByName(useFileStore.getState().files, fileName, parentId);
           if (newFile) {
             fileStore.updateFileContent(newFile.id, content);
+            fileStore.setActiveFile(newFile.id);
           }
         }
+
         // Sync to backend workspace
         void writeWorkspaceFile(path, content);
 
-        return { success: true, message: `Created file: ${path}` };
+        return { success: true, message: existingFile ? `Updated file: ${path}` : `Created file: ${path}` };
       }
 
 
       case "create_folder": {
-        const path = args.path || args.name;
+        const path = normalizeWorkspacePath(args.path || args.name || "");
         if (!path) return { success: false, message: "No folder path specified" };
 
-        const parts = path.split("/");
+        const parts = path.split("/").filter(Boolean);
         let parentId: string | null = null;
         for (const folderName of parts) {
           const existing = findNodeByName(fileStore.files, folderName, parentId);
@@ -256,7 +260,7 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
 
 
       case "delete_file": {
-        const path = args.path || args.name;
+        const path = normalizeWorkspacePath(args.path || args.name || "");
         if (!path) return { success: false, message: "No file path specified" };
 
         const node = findNodeByPath(fileStore.files, path);
@@ -269,13 +273,22 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
       }
 
       case "modify_file": {
-        const path = args.path || args.name;
+        const path = normalizeWorkspacePath(args.path || args.name || "");
         const rawContent = args.content || toolCall.preview || "";
-        const content = rawContent.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+        const content = normalizeGeneratedCode(path, rawContent);
         if (!path) return { success: false, message: "No file path specified" };
 
-        const node = findNodeByPath(fileStore.files, path);
-        if (!node) return { success: false, message: `File not found: ${path}` };
+        let node = findNodeByPath(fileStore.files, path);
+        if (!node) {
+          const createResult = executeToolCall({
+            ...toolCall,
+            tool: "create_file",
+            args: { ...args, path, content },
+          });
+          return createResult.success
+            ? { success: true, message: `Created file: ${path}` }
+            : createResult;
+        }
 
         fileStore.updateFileContent(node.id, content);
         fileStore.setActiveFile(node.id);
@@ -285,7 +298,7 @@ export function executeToolCall(toolCall: AgentToolCall): { success: boolean; me
       }
 
       case "read_file": {
-        const path = args.path || args.name;
+        const path = normalizeWorkspacePath(args.path || args.name || "");
         if (!path) return { success: false, message: "No file path specified" };
 
         const node = findNodeByPath(fileStore.files, path);

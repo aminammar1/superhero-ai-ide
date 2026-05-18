@@ -76,6 +76,12 @@ const defaultProfile: UserProfile = {
   onboarded: false
 };
 
+function normalizePersistedModel(model: unknown): string {
+  return model === "qwen/qwen3-coder:free" || typeof model !== "string"
+    ? DEFAULT_CHAT_MODEL
+    : model;
+}
+
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
@@ -210,7 +216,13 @@ export const useAppStore = create<AppState>()(
         // Persist recent messages for context memory
         messages: state.messages.slice(-MAX_PERSISTED_MESSAGES),
         taskContext: state.taskContext,
-      })
+      }),
+      merge: (persistedState: any, currentState) => ({
+        ...currentState,
+        ...persistedState,
+        chatModel: normalizePersistedModel(persistedState?.chatModel),
+        codeModel: normalizePersistedModel(persistedState?.codeModel),
+      }),
     }
   )
 );

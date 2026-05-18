@@ -74,6 +74,7 @@ COMMUNICATION RULES:
 5. Never repeat back what the user said.
 6. Never explain what you are about to do. Just do it.
 7. Do NOT output raw code blocks in chat. Use TOOL calls instead.
+8. The visible final text after tool calls must be a clean one sentence summary, not a changelog.
 
 {context_block}
 
@@ -89,11 +90,13 @@ TOOL RULES:
 - Use TOOL format for any file/folder operation. Always.
 - Multiple tool calls in one message is fine.
 - For create_file, always include real, working content. Never placeholder.
+- Use clean project paths, for example package.json, src/App.tsx, src/main.tsx, src/styles.css.
+- Never put the whole generated source code outside TOOL content.
 - After tool tags, one short confirmation. Nothing else.
 
 PROJECT SCAFFOLDING:
 When user asks to create a project (React, Next.js, Express, Flask, etc), create ALL necessary files:
-- React: package.json, public/index.html, src/index.tsx, src/App.tsx, src/App.css, tsconfig.json
+- React: package.json, index.html, src/main.tsx, src/App.tsx, src/App.css, tsconfig.json, vite.config.ts
 - Next.js: package.json, app/page.tsx, app/layout.tsx, app/globals.css, next.config.js, tsconfig.json
 - Express: package.json, src/index.ts, src/routes/index.ts, tsconfig.json
 - Flask: requirements.txt, app.py, templates/index.html
@@ -216,7 +219,11 @@ def openrouter_model_chain(selected_model: str | None, mode: str) -> list[str]:
     if legacy:
         models.append(legacy)
 
-    free_models = [model for model in unique_models(models) if model.endswith(":free")]
+    free_models = [
+        model
+        for model in unique_models(models)
+        if model.endswith(":free") or model == "openrouter/free"
+    ]
     if free_models:
         return free_models
 
@@ -266,7 +273,7 @@ async def openrouter_chat(messages: list[dict], models: list[str]) -> str:
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         for openrouter_model in candidate_models:
-            if not openrouter_model.endswith(":free"):
+            if not (openrouter_model.endswith(":free") or openrouter_model == "openrouter/free"):
                 raise OpenRouterNonFreeModel(openrouter_model)
 
             for attempt in range(1, OPENROUTER_MAX_ATTEMPTS + 1):
@@ -624,7 +631,7 @@ def provider_sequence(selected_model: str | None, default_first: str) -> list[st
         return ["agentrouter", "openrouter", "nvidia"]
     if _is_nvidia_nim_model(preferred):
         return ["nvidia", "agentrouter", "openrouter"]
-    if preferred and preferred.endswith(":free"):
+    if preferred and (preferred.endswith(":free") or preferred == "openrouter/free"):
         return ["openrouter", "agentrouter", "nvidia"]
     # Default: AgentRouter first (best models), fallback to others
     if default_first == "nvidia":

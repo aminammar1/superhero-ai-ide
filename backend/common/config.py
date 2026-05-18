@@ -63,37 +63,37 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("OPENROUTER_API_KEY"),
     )
     openrouter_model: str = Field(
-        default="qwen/qwen3-coder:free",
+        default="nvidia/nemotron-3-super-120b-a12b:free",
         validation_alias=AliasChoices("OPENROUTER_MODEL", "OEPNROUTER_MODEL"),
     )
     openrouter_chat_models: str = Field(
         default=(
-            "qwen/qwen3-coder:free,"
             "nvidia/nemotron-3-super-120b-a12b:free,"
-            "zai-org/glm-5:free,"
-            "google/gemma-4-31b-it:free,"
+            "openrouter/free,"
+            "inclusionai/ring-2.6-1t:free,"
+            "poolside/laguna-m-1:free,"
             "baidu/cobuddy:free,"
-            "deepseek/deepseek-r1:free,"
-            "nvidia/nemotron-3-nano-30b-a3b:free,"
             "minimax/minimax-m2.5:free,"
             "openai/gpt-oss-120b:free,"
+            "nvidia/nemotron-3-nano-30b-a3b:free,"
+            "google/gemma-4-31b-it:free,"
             "openai/gpt-oss-20b:free,"
-            "meta-llama/llama-3.3-70b-instruct:free"
+            "deepseek/deepseek-r1:free"
         ),
         validation_alias=AliasChoices("OPENROUTER_CHAT_MODELS"),
     )
     openrouter_code_models: str = Field(
         default=(
-            "qwen/qwen3-coder:free,"
             "nvidia/nemotron-3-super-120b-a12b:free,"
-            "zai-org/glm-5:free,"
+            "openrouter/free,"
+            "inclusionai/ring-2.6-1t:free,"
+            "poolside/laguna-m-1:free,"
             "baidu/cobuddy:free,"
-            "google/gemma-4-31b-it:free,"
-            "deepseek/deepseek-r1:free,"
-            "nvidia/nemotron-3-nano-30b-a3b:free,"
-            "openai/gpt-oss-120b:free,"
             "minimax/minimax-m2.5:free,"
-            "meta-llama/llama-3.3-70b-instruct:free"
+            "openai/gpt-oss-120b:free,"
+            "nvidia/nemotron-3-nano-30b-a3b:free,"
+            "google/gemma-4-31b-it:free,"
+            "deepseek/deepseek-r1:free"
         ),
         validation_alias=AliasChoices("OPENROUTER_CODE_MODELS"),
     )

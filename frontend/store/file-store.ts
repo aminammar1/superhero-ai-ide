@@ -2,6 +2,11 @@
 
 import { create } from "zustand";
 import type { Language } from "@/lib/types";
+import {
+  detectLanguageFromName,
+  normalizeGeneratedCode,
+  normalizeWorkspacePath,
+} from "@/lib/code-format";
 
 export interface FileNode {
   id: string;
@@ -14,33 +19,7 @@ export interface FileNode {
 }
 
 function detectLanguage(name: string): Language | undefined {
-  const ext = name.split(".").pop()?.toLowerCase();
-  const map: Record<string, Language> = {
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    py: "python",
-    go: "go",
-    java: "java",
-    c: "c",
-    cpp: "cpp",
-    cc: "cpp",
-    cxx: "cpp",
-    h: "c",
-    hpp: "cpp",
-    html: "html",
-    htm: "html",
-    css: "css",
-    json: "json",
-    rs: "rust",
-    rb: "ruby",
-    php: "php",
-    swift: "swift",
-    sh: "bash",
-    bash: "bash",
-  };
-  return ext ? map[ext] : undefined;
+  return detectLanguageFromName(name);
 }
 
 /* ────────────────────────────────────────────
@@ -52,7 +31,7 @@ interface FileStore {
   files: FileNode[];
   activeFileId: string | null;
   expandedFolders: Set<string>;
-  setActiveFile: (id: string) => void;
+  setActiveFile: (id: string | null) => void;
   toggleFolder: (id: string) => void;
   createNode: (parentId: string | null, name: string, type: "file" | "folder") => void;
   deleteNode: (id: string) => void;
@@ -144,6 +123,13 @@ function updateNode(nodes: FileNode[], id: string, updater: (n: FileNode) => Fil
 
 import { persist } from "zustand/middleware";
 
+function sortImportEntries(entries: ImportEntry[]): ImportEntry[] {
+  return [...entries].sort((a, b) => {
+    if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  });
+}
+
 export const useFileStore = create<FileStore>()(
   persist(
     (set, get) => ({
@@ -201,8 +187,9 @@ export const useFileStore = create<FileStore>()(
 
       loadFromImportTree: (tree) => {
         const convertTree = (entries: ImportEntry[], parentId: string | null): FileNode[] => {
-          return entries.map((entry) => {
+          return sortImportEntries(entries).map((entry) => {
             const id = crypto.randomUUID();
+            const path = normalizeWorkspacePath(entry.path || entry.name);
             if (entry.type === "folder") {
               return {
                 id,
@@ -218,7 +205,7 @@ export const useFileStore = create<FileStore>()(
               type: "file" as const,
               parentId,
               language: detectLanguage(entry.name),
-              content: entry.content ?? "",
+              content: entry.content !== undefined ? normalizeGeneratedCode(path, entry.content) : "",
             };
           });
         };

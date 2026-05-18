@@ -217,11 +217,22 @@ function HudStatusBar({ config }: { config: typeof HERO_TERMINAL.ironman }) {
 /* ────────────────────────────────────────────
    Command Output Block
    ──────────────────────────────────────────── */
+const ANSI_PATTERN = /(?:\u001b|\u009b|\u241b)\[[0-?]*[ -/]*[@-~]|(?:\u001b|\u241b)\][\s\S]*?(?:\u0007|\u001b\\)/g;
+
+function cleanTerminalText(text: string): string {
+  return text
+    .replace(ANSI_PATTERN, "")
+    .replace(/[\u001b\u009b\u241b]/g, "")
+    .replace(/\r\n?/g, "\n");
+}
+
 function OutputBlock({ text, isError, config }: {
   text: string;
   isError: boolean;
   config: typeof HERO_TERMINAL.ironman;
 }) {
+  const cleanText = cleanTerminalText(text);
+
   return (
     <motion.pre
       initial={{ opacity: 0, y: 5 }}
@@ -233,7 +244,7 @@ function OutputBlock({ text, isError, config }: {
         textShadow: isError ? "0 0 6px rgba(248, 113, 113, 0.3)" : `0 0 6px rgba(${config.colorRgb}, 0.15)`,
       }}
     >
-      {text}
+      {cleanText}
     </motion.pre>
   );
 }
@@ -255,6 +266,7 @@ export function TerminalOutput() {
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [cmdLog, setCmdLog] = useState<string[]>([]);
   const [bootComplete, setBootComplete] = useState(false);
+  const [isCommandRunning, setCommandRunning] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -285,7 +297,7 @@ export function TerminalOutput() {
       return;
     }
 
-    if (e.key === "Enter" && cmdInput.trim()) {
+    if (e.key === "Enter" && cmdInput.trim() && !isCommandRunning) {
       const currentInput = cmdInput.trim();
       setCmdInput("");
       setCmdLog(prev => [...prev, currentInput]);
@@ -352,9 +364,10 @@ export function TerminalOutput() {
       }
 
       // Execute in workspace shell
+      setCommandRunning(true);
       setCmdHistory(prev => [...prev, {
         cmd: currentInput,
-        output: "⟳ Running...",
+        output: "Running command. Long npm installs can take several minutes...",
         isError: false,
       }]);
 
@@ -363,8 +376,8 @@ export function TerminalOutput() {
         setCmdHistory(prev => {
           const updated = [...prev];
           let resultText = "";
-          if (result.stdout) resultText += result.stdout;
-          if (result.stderr) resultText += (resultText ? "\n" : "") + result.stderr;
+          if (result.stdout) resultText += cleanTerminalText(result.stdout);
+          if (result.stderr) resultText += (resultText ? "\n" : "") + cleanTerminalText(result.stderr);
           if (!resultText) resultText = `Process exited with code ${result.exit_code}`;
           updated[updated.length - 1] = {
             cmd: currentInput,
@@ -373,16 +386,18 @@ export function TerminalOutput() {
           };
           return updated;
         });
-      } catch {
+      } catch (err) {
         setCmdHistory(prev => {
           const updated = [...prev];
           updated[updated.length - 1] = {
             cmd: currentInput,
-            output: "✘ Command failed — workspace unreachable",
+            output: err instanceof Error ? `Command failed: ${err.message}` : "Command failed. Workspace unreachable.",
             isError: true,
           };
           return updated;
         });
+      } finally {
+        setCommandRunning(false);
       }
     }
   };
@@ -572,6 +587,7 @@ export function TerminalOutput() {
               value={cmdInput}
               onChange={(e) => setCmdInput(e.target.value)}
               onKeyDown={handleCommand}
+              disabled={isCommandRunning}
               className="flex-1 bg-transparent outline-none placeholder:text-transparent text-[11px]"
               style={{
                 color: `rgba(${config.colorRgb}, 0.85)`,
@@ -588,6 +604,11 @@ export function TerminalOutput() {
               animate={{ opacity: [1, 0] }}
               transition={{ duration: 0.8, repeat: Infinity }}
             />
+            {isCommandRunning && (
+              <span className="text-[9px] uppercase tracking-[0.16em]" style={{ color: `rgba(${config.colorRgb}, 0.45)` }}>
+                busy
+              </span>
+            )}
           </div>
         )}
       </div>

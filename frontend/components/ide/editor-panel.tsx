@@ -64,7 +64,7 @@ export function EditorPanel() {
   };
 
   const handleCloseFile = () => {
-    setActiveFile(null as unknown as string);
+    setActiveFile(null);
     setCode("");
   };
 

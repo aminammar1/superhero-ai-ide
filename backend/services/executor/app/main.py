@@ -3,6 +3,7 @@ import tempfile
 import time
 import os
 import shutil
+import shlex
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -18,10 +19,22 @@ WORKSPACE_ROOT = Path("/tmp/hero-workspace")
 WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
 
 SHELL_TIMEOUT_SECONDS = 300
-NPM_TIMEOUT_SECONDS = 600
+NPM_TIMEOUT_SECONDS = 900
 
 PACKAGE_MANAGER_CMDS = frozenset({"npm", "npx", "yarn", "pnpm", "pip", "pip3", "go", "cargo", "mvn", "gradle"})
-LONG_RUNNING_ARGS = frozenset({"install", "i", "ci", "build", "run", "dev", "start", "serve"})
+LONG_RUNNING_ARGS = frozenset({"install", "i", "ci", "add", "create", "init", "build", "run", "dev", "start", "serve"})
+PACKAGE_MANAGER_MARKERS = (
+    "npm ",
+    "npx ",
+    "yarn ",
+    "pnpm ",
+    "pip ",
+    "pip3 ",
+    "go ",
+    "cargo ",
+    "mvn ",
+    "gradle ",
+)
 
 
 class ExecuteRequest(BaseModel):
@@ -317,12 +330,20 @@ class ShellRequest(BaseModel):
     command: str
 
 
+def _safe_workspace_path(path: str) -> Path | None:
+    target = (WORKSPACE_ROOT / path).resolve()
+    try:
+        target.relative_to(WORKSPACE_ROOT)
+    except ValueError:
+        return None
+    return target
+
+
 @app.post("/workspace/write")
 async def workspace_write(req: WriteFileRequest):
     """Write a file to the workspace directory."""
-    target = (WORKSPACE_ROOT / req.path).resolve()
-    # Security: ensure we stay inside WORKSPACE_ROOT
-    if not str(target).startswith(str(WORKSPACE_ROOT)):
+    target = _safe_workspace_path(req.path)
+    if target is None:
         return {"success": False, "error": "Path traversal blocked"}
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(req.content, encoding="utf-8")
@@ -332,8 +353,8 @@ async def workspace_write(req: WriteFileRequest):
 @app.get("/workspace/read")
 async def workspace_read(path: str):
     """Read a file from the workspace."""
-    target = (WORKSPACE_ROOT / path).resolve()
-    if not str(target).startswith(str(WORKSPACE_ROOT)):
+    target = _safe_workspace_path(path)
+    if target is None:
         return {"success": False, "error": "Path traversal blocked"}
     if not target.exists():
         return {"success": False, "error": f"File not found: {path}"}
@@ -343,8 +364,8 @@ async def workspace_read(path: str):
 @app.get("/workspace/list")
 async def workspace_list(path: str = ""):
     """List files/dirs in the workspace."""
-    target = (WORKSPACE_ROOT / path).resolve()
-    if not str(target).startswith(str(WORKSPACE_ROOT)):
+    target = _safe_workspace_path(path)
+    if target is None:
         return {"success": False, "error": "Path traversal blocked"}
     if not target.exists():
         return {"success": True, "entries": []}
@@ -367,8 +388,8 @@ async def workspace_list(path: str = ""):
 @app.delete("/workspace/delete")
 async def workspace_delete(path: str):
     """Delete a file or folder from the workspace."""
-    target = (WORKSPACE_ROOT / path).resolve()
-    if not str(target).startswith(str(WORKSPACE_ROOT)):
+    target = _safe_workspace_path(path)
+    if target is None:
         return {"success": False, "error": "Path traversal blocked"}
     if not target.exists():
         return {"success": False, "error": f"Not found: {path}"}
@@ -400,32 +421,103 @@ def _is_dev_server_cmd(cmd_parts: list[str]) -> bool:
     return False
 
 
+def _looks_like_dev_server_command(command: str, cmd_parts: list[str]) -> bool:
+    if _is_dev_server_cmd(cmd_parts):
+        return True
+    lower = f" {command.lower()} "
+    return any(
+        needle in lower
+        for needle in (
+            " npm run dev",
+            " npm start",
+            " yarn dev",
+            " yarn start",
+            " pnpm dev",
+            " pnpm start",
+            " next dev",
+            " vite ",
+            " uvicorn ",
+            " flask run",
+        )
+    )
+
+
+def _split_shell_command(command: str) -> list[str]:
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.strip().split()
+
+
+def _looks_like_package_command(command: str, cmd_parts: list[str]) -> bool:
+    if cmd_parts and cmd_parts[0].lower() in PACKAGE_MANAGER_CMDS:
+        return True
+    lower = f" {command.lower().strip()} "
+    return any(marker in lower for marker in PACKAGE_MANAGER_MARKERS)
+
+
+def _has_long_running_package_arg(command: str, cmd_parts: list[str]) -> bool:
+    args_lower = {part.lower() for part in cmd_parts[1:]}
+    if args_lower.intersection(LONG_RUNNING_ARGS):
+        return True
+    lower = command.lower()
+    return any(
+        needle in lower
+        for needle in (
+            " npm i",
+            " npm install",
+            " npm ci",
+            " npm create",
+            " npx create",
+            " yarn add",
+            " yarn install",
+            " pnpm add",
+            " pnpm install",
+            " pip install",
+        )
+    )
+
+
 @app.post("/workspace/shell")
 async def workspace_shell(req: ShellRequest):
+    timeout = SHELL_TIMEOUT_SECONDS
     try:
-        cmd_parts = req.command.strip().split()
+        command = req.command.strip()
+        if not command:
+            return {"stdout": "", "stderr": "No command provided.", "exit_code": 2, "duration_ms": 0}
+
+        cmd_parts = _split_shell_command(command)
         base_cmd = cmd_parts[0].lower() if cmd_parts else ""
-        has_long_arg = any(a in LONG_RUNNING_ARGS for a in cmd_parts[1:])
-        is_pkg_manager = base_cmd in PACKAGE_MANAGER_CMDS
-        is_dev_server = _is_dev_server_cmd(cmd_parts)
+        has_long_arg = _has_long_running_package_arg(command, cmd_parts)
+        is_pkg_manager = _looks_like_package_command(command, cmd_parts)
+        is_dev_server = _looks_like_dev_server_command(command, cmd_parts)
 
         env = os.environ.copy()
         env["HOME"] = str(WORKSPACE_ROOT)
         env["NODE_ENV"] = "development"
-        env["CI"] = "true"
+        env["CI"] = "1"
+        env["BROWSER"] = "none"
+        env["HOST"] = "0.0.0.0"
+        env["NO_COLOR"] = "1"
+        env["TERM"] = "dumb"
         env["NPM_CONFIG_YES"] = "true"
+        env["NPM_CONFIG_FUND"] = "false"
+        env["NPM_CONFIG_AUDIT"] = "false"
+        env["npm_config_yes"] = "true"
+        env["npm_config_fund"] = "false"
+        env["npm_config_audit"] = "false"
         npm_global = WORKSPACE_ROOT / ".npm-global" / "bin"
         npm_global.mkdir(parents=True, exist_ok=True)
         if "PATH" in env:
             env["PATH"] = f"{npm_global}:/usr/local/bin:/usr/bin:/bin:{env['PATH']}"
 
-        wrap = req.command
+        wrap = command
         if is_pkg_manager and base_cmd in ("npm", "npx", "yarn", "pnpm"):
-            wrap = f"export HOME={WORKSPACE_ROOT} && {req.command}"
+            wrap = f"export HOME={WORKSPACE_ROOT} && {command}"
 
         if is_dev_server:
             proc = subprocess.Popen(
-                ["sh", "-c", wrap],
+                ["sh", "-lc", wrap],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -475,9 +567,7 @@ async def workspace_shell(req: ShellRequest):
                     break
 
             status = f"Server started (PID {proc.pid})"
-            if url_hint:
-                status += f"\n{url_hint}"
-            else:
+            if not url_hint:
                 status += "\nProcess is running in the background."
 
             return {
@@ -491,7 +581,7 @@ async def workspace_shell(req: ShellRequest):
 
         started = time.perf_counter()
         completed = subprocess.run(
-            ["sh", "-c", wrap],
+            ["sh", "-lc", wrap],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -554,9 +644,12 @@ def _collect_tree(root: Path, base: Path) -> list[dict]:
     """Recursively collect file tree for API response, including text file content."""
     entries = []
     try:
-        for item in sorted(root.iterdir()):
-            # Skip hidden dirs / node_modules / .git
-            if item.name.startswith(".") or item.name in ("node_modules", "__pycache__", ".git"):
+        def sort_key(path: Path):
+            return (1 if path.is_file() else 0, path.name.lower())
+
+        for item in sorted(root.iterdir(), key=sort_key):
+            # Skip generated or internal directories, but keep useful dotfiles like .gitignore.
+            if item.is_dir() and (item.name.startswith(".") or item.name in ("node_modules", "__pycache__", "dist", "build")):
                 continue
             rel = str(item.relative_to(base))
             if item.is_dir():
@@ -602,6 +695,7 @@ async def workspace_import_github(req: GitHubImportRequest):
         import io
 
         # Download the ZIP archive
+        imported_branch = req.branch
         try:
             response = urllib.request.urlopen(zip_url, timeout=30)
             zip_data = response.read()
@@ -612,6 +706,7 @@ async def workspace_import_github(req: GitHubImportRequest):
                 try:
                     response = urllib.request.urlopen(zip_url_master, timeout=30)
                     zip_data = response.read()
+                    imported_branch = "master"
                 except Exception:
                     return {"success": False, "error": f"Could not download repo: {e}"}
             else:
@@ -643,7 +738,11 @@ async def workspace_import_github(req: GitHubImportRequest):
                 if not rel_path:
                     continue
 
-                target = WORKSPACE_ROOT / rel_path
+                target = (WORKSPACE_ROOT / rel_path).resolve()
+                try:
+                    target.relative_to(WORKSPACE_ROOT)
+                except ValueError:
+                    continue
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(info) as src:
                     target.write_bytes(src.read())
@@ -654,10 +753,9 @@ async def workspace_import_github(req: GitHubImportRequest):
         return {
             "success": True,
             "repo": f"{owner}/{repo}",
-            "branch": req.branch,
+            "branch": imported_branch,
             "files": tree,
         }
 
     except Exception as e:
         return {"success": False, "error": str(e)}
-

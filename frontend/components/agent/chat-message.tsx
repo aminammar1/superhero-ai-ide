@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import type { ActionIndicator, ChatMessage, HeroTheme } from "@/lib/types";
 import { heroThemeMap } from "@/themes/superheroes";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   FileSearch,
   FileText,
@@ -198,14 +198,50 @@ function JarvisStreamingHud({ color }: { color: string }) {
   );
 }
 
-export function ChatMessageBubble({ message, theme, isStreaming = false }: { message: ChatMessage; theme: HeroTheme; isStreaming?: boolean }) {
+function ChatTypingIndicator({ color }: { color: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      className="flex items-center gap-1 rounded-2xl border border-white/[0.05] bg-white/[0.025] px-3 py-2"
+    >
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="h-1.5 w-1.5 rounded-full"
+          style={{ backgroundColor: color }}
+          animate={{ opacity: [0.25, 0.8, 0.25], y: [0, -2, 0] }}
+          transition={{ duration: 0.9, delay: i * 0.14, repeat: Infinity }}
+        />
+      ))}
+    </motion.div>
+  );
+}
+
+function cleanStreamingContent(content: string): string {
+  return content.replace(/\[TOOL:[\s\S]*$/g, "").trim();
+}
+
+export function ChatMessageBubble({
+  message,
+  theme,
+  isStreaming = false,
+  streamMode = "chat",
+}: {
+  message: ChatMessage;
+  theme: HeroTheme;
+  isStreaming?: boolean;
+  streamMode?: "chat" | "task";
+}) {
   const hero = heroThemeMap[theme];
   const color = hero.palette[0];
   const isAssistant = message.role === "assistant";
   const isAction = message.role === "action";
   const hasActions = message.actions && message.actions.length > 0;
   const isThinkingOnly = hasActions && message.actions!.every((a) => a.type === "thinking");
-  const currentlyStreaming = isStreaming || (isAssistant && !message.content);
+  const visibleContent = isStreaming && isAssistant ? cleanStreamingContent(message.content) : message.content;
+  const isWaitingForFirstChunk = isStreaming && isAssistant && !visibleContent;
   const hasToolContent = isAssistant && message.content && /\[TOOL:/.test(message.content);
 
   if (isAction && isThinkingOnly) {
@@ -237,13 +273,13 @@ export function ChatMessageBubble({ message, theme, isStreaming = false }: { mes
     );
   }
 
-  if (currentlyStreaming) {
+  if (isWaitingForFirstChunk || (isStreaming && streamMode === "task" && hasToolContent && !visibleContent)) {
     return (
       <div className="flex gap-2">
         <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-xl border border-white/[0.08] mt-0.5">
           <Image src={hero.asset} alt={hero.name} fill className="object-cover" />
         </div>
-        <JarvisStreamingHud color={color} />
+        {streamMode === "task" || hasToolContent ? <JarvisStreamingHud color={color} /> : <ChatTypingIndicator color={color} />}
       </div>
     );
   }
@@ -263,7 +299,15 @@ export function ChatMessageBubble({ message, theme, isStreaming = false }: { mes
           "rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
           isAssistant ? "border border-white/[0.05] bg-white/[0.025] text-white/75" : "bg-primary/70 text-white"
         )}>
-          {message.content}
+          {visibleContent}
+          {isStreaming && isAssistant && streamMode === "chat" && (
+            <motion.span
+              className="ml-1 inline-block h-3 w-[2px] translate-y-[2px] rounded-full"
+              style={{ backgroundColor: color }}
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 0.9, repeat: Infinity }}
+            />
+          )}
         </div>
       </div>
     </div>

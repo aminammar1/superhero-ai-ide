@@ -17,6 +17,7 @@ import { heroThemeMap } from "@/themes/superheroes";
 import { HeroMotif } from "@/components/ui/hero-motif";
 import { ModelSelector } from "@/components/agent/model-selector";
 import { cn } from "@/lib/utils";
+import { summarizeAssistantOutput } from "@/lib/assistant-output";
 import type { HeroTheme, ActionIndicator } from "@/lib/types";
 
 const CODE_PROMPT_HINTS = [
@@ -25,10 +26,21 @@ const CODE_PROMPT_HINTS = [
   "cpp", "algorithm", "file", "create", "modify", "edit",
 ];
 
+const TASK_PROMPT_HINTS = [
+  "create", "scaffold", "generate", "build", "make", "setup", "set up",
+  "modify", "edit", "fix", "delete", "write", "add file", "run", "install",
+  "import repo", "clone",
+];
+
 function pickModelForPrompt(prompt: string, chatModel: string, codeModel: string): string {
   const text = prompt.toLowerCase();
   if (CODE_PROMPT_HINTS.some((hint) => text.includes(hint))) return codeModel;
   return chatModel;
+}
+
+function isLikelyAgentTask(prompt: string): boolean {
+  const text = prompt.toLowerCase();
+  return TASK_PROMPT_HINTS.some((hint) => text.includes(hint));
 }
 
 /* ────────────────────────────────────────────
@@ -269,6 +281,7 @@ export function AgentPanel() {
 
   const [chatInput, setChatInput] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [streamMode, setStreamMode] = useState<"chat" | "task">("chat");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const welcomePlayedRef = useRef(false);
   const speechTranscriptRef = useRef("");
@@ -386,11 +399,13 @@ export function AgentPanel() {
       abortRef.current = null;
     }
     setStreamingChat(false);
+    setStreamMode("chat");
   }, [setStreamingChat]);
 
   const handleChat = async (prompt: string) => {
     const model = pickModelForPrompt(prompt, chatModel, codeModel);
     const aId = crypto.randomUUID();
+    setStreamMode(isLikelyAgentTask(prompt) ? "task" : "chat");
     startAssistantMessage(aId);
     setStreamingChat(true);
 
@@ -410,8 +425,9 @@ export function AgentPanel() {
 
       const finalText = useAppStore.getState().messages.find((m) => m.id === aId)?.content ?? "";
       const { cleanText, toolCalls } = parseToolCalls(finalText);
-      useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: cleanText } : msg) }));
-      addTaskContext(`User: ${prompt.slice(0, 50)} → ${cleanText.slice(0, 50)}`);
+      const assistantSummary = summarizeAssistantOutput(cleanText, toolCalls.length);
+      useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: assistantSummary } : msg) }));
+      addTaskContext(`User: ${prompt.slice(0, 50)} -> ${assistantSummary.slice(0, 50)}`);
       if (toolCalls.length > 0) {
         // Separate auto-exec tools from approval-needed tools
         const autoTools = toolCalls.filter((tc) => !requiresApproval(tc.tool));
@@ -435,13 +451,14 @@ export function AgentPanel() {
           queueAction(tc);
         }
       }
-      if (usesVoiceOutput) await playVoice(cleanText);
+      if (usesVoiceOutput) await playVoice(assistantSummary);
     } catch (e) {
       if (controller.signal.aborted) return;
       toast.error(e instanceof Error ? e.message : "Failed.");
     } finally {
       abortRef.current = null;
       setStreamingChat(false);
+      setStreamMode("chat");
     }
   };
 
@@ -482,7 +499,15 @@ export function AgentPanel() {
             <div className="space-y-2.5">
               {messages.map((msg, idx) => {
                 const isLastAssistant = isStreamingChat && msg.role === "assistant" && idx === messages.length - 1;
-                return <ChatMessageBubble key={msg.id} message={msg} theme={theme} isStreaming={isLastAssistant} />;
+                return (
+                  <ChatMessageBubble
+                    key={msg.id}
+                    message={msg}
+                    theme={theme}
+                    isStreaming={isLastAssistant}
+                    streamMode={isLastAssistant ? streamMode : "chat"}
+                  />
+                );
               })}
               <div ref={scrollRef} />
             </div>

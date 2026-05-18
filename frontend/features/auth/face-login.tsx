@@ -26,10 +26,30 @@ interface FaceBox {
   height: number;
 }
 
+const PARTICLES = Array.from({ length: 20 }, (_, i) => ({
+  delay: i * 0.5,
+  drift: ((i * 37) % 100) - 50,
+  duration: 8 + (i % 7),
+  size: 2 + (i % 4),
+  x: (i * 17) % 100,
+}));
+
 /* ────────────────────────────────────────────
    Particle effects
    ──────────────────────────────────────────── */
-function FloatingParticle({ delay, x, size }: { delay: number; x: number; size: number }) {
+function FloatingParticle({
+  delay,
+  drift,
+  duration,
+  x,
+  size,
+}: {
+  delay: number;
+  drift: number;
+  duration: number;
+  x: number;
+  size: number;
+}) {
   return (
     <motion.div
       className="absolute rounded-full bg-white/[0.04]"
@@ -37,11 +57,12 @@ function FloatingParticle({ delay, x, size }: { delay: number; x: number; size: 
       initial={{ bottom: -20, opacity: 0 }}
       animate={{
         bottom: ["0%", "100%"],
-        opacity: [0, 0.6, 0],
-        x: [0, (Math.random() - 0.5) * 100],
+        opacity: [0, 0.55, 0],
+        x: [0, drift],
+        scale: [0.8, 1.15, 0.8],
       }}
       transition={{
-        duration: 8 + Math.random() * 6,
+        duration,
         delay,
         repeat: Infinity,
         ease: "linear",
@@ -101,6 +122,7 @@ function FeaturePill({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }}
       className="flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 backdrop-blur-sm"
+      whileHover={{ y: -1, borderColor: "rgba(255,255,255,0.12)" }}
     >
       <Icon className="h-3 w-3 text-primary/50" />
       <span className="text-[10px] text-white/30">{label}</span>
@@ -383,12 +405,14 @@ export function FaceLogin() {
       />
 
       {/* Floating particles */}
-      {Array.from({ length: 20 }).map((_, i) => (
+      {PARTICLES.map((particle) => (
         <FloatingParticle
-          key={i}
-          delay={i * 0.5}
-          x={Math.random() * 100}
-          size={2 + Math.random() * 4}
+          key={`${particle.x}-${particle.delay}`}
+          delay={particle.delay}
+          drift={particle.drift}
+          duration={particle.duration}
+          x={particle.x}
+          size={particle.size}
         />
       ))}
 
