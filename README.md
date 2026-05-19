@@ -1,8 +1,9 @@
-<p align="center">
-  <img src="docs/logo.png" alt="SuperHero AI IDE" width="140" />
-</p>
 
 <h1 align="center">🦸 SuperHero AI IDE</h1>
+
+  <p align="center">
+    <img src="public/screenshots/image.png" alt="SuperHero AI IDE" />
+  </p>
 
 <p align="center">
   <strong>An AI-powered cloud IDE with superhero-themed personas, real-time voice interaction, and sandboxed code execution — built for developers who want superpowers.</strong>
