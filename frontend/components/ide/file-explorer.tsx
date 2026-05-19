@@ -16,6 +16,8 @@ import {
   FolderGit,
   Loader2,
   X,
+  FileImage,
+  FileArchive,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -24,7 +26,7 @@ import { useAppStore } from "@/store/app-store";
 import { heroThemeMap } from "@/themes/superheroes";
 import { HeroMotif } from "@/components/ui/hero-motif";
 import { cn } from "@/lib/utils";
-import { importGitHubRepo } from "@/services/api";
+import { importGitHubRepo, deleteWorkspaceFile } from "@/services/api";
 
 interface ContextMenuState {
   x: number;
@@ -133,11 +135,16 @@ export function FileExplorer() {
   const [importing, setImporting] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const handleClearWorkspace = useCallback(() => {
+  const handleClearWorkspace = useCallback(async () => {
     useFileStore.setState({ files: [], activeFileId: null, expandedFolders: new Set() });
     setCode("");
     setShowClearConfirm(false);
     toast.success("Workspace cleared");
+    try {
+      await deleteWorkspaceFile("");
+    } catch (err) {
+      console.error("Failed to clear backend workspace:", err);
+    }
   }, [setCode]);
 
   const openCreateInput = (parentId: string | null, type: "file" | "folder") => {
@@ -569,6 +576,13 @@ export function FileExplorer() {
   );
 }
 
+function getFileIcon(node: FileNode) {
+  if (node.type === "folder") return null;
+  if (node.fileType === "image") return <FileImage className="ml-3 h-3.5 w-3.5 shrink-0 text-purple-400/50" />;
+  if (node.fileType === "binary") return <FileArchive className="ml-3 h-3.5 w-3.5 shrink-0 text-orange-400/50" />;
+  return <File className="ml-3 h-3.5 w-3.5 shrink-0 text-primary/40" />;
+}
+
 function TreeNode({
   node,
   depth,
@@ -627,7 +641,7 @@ function TreeNode({
             )}
           </>
         ) : (
-          <File className="ml-3 h-3.5 w-3.5 shrink-0 text-primary/40" />
+          getFileIcon(node)
         )}
 
         {isRenaming ? (

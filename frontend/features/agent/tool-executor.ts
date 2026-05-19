@@ -312,6 +312,53 @@ export async function executeToolCall(toolCall: AgentToolCall): Promise<{ succes
         return { success: true, message: listing || "(empty workspace)" };
       }
 
+      case "explain_project": {
+        const readmeNode = findNodeByPath(fileStore.files, "README.md")
+          || findNodeByPath(fileStore.files, "readme.md")
+          || findNodeByName(fileStore.files, "README.md", null)
+          || findNodeByName(fileStore.files, "readme.md", null);
+
+        const listing = buildFileListing(fileStore.files, 0);
+
+        if (readmeNode && readmeNode.content) {
+          // Return structured context for follow-up AI explanation
+          return {
+            success: true,
+            message: `__explain_project__\nREADME.md:\n${readmeNode.content.slice(0, 4000)}\n\nProject structure:\n${listing || "(empty)"}`,
+          };
+        }
+
+        if (listing) {
+          // No README — use structure + sample key files
+          const keyFiles = collectKeyFileContents(fileStore.files, 3);
+          const keyFileBlock = keyFiles.length > 0
+            ? `\nKey files:\n${keyFiles.map(f => `--- ${f.path} ---\n${f.content.slice(0, 1500)}`).join("\n")}`
+            : "";
+          return {
+            success: true,
+            message: `__explain_project__\nNo README.md found.\n\nProject structure:\n${listing}${keyFileBlock}`,
+          };
+        }
+
+        return { success: true, message: "Workspace is empty. Nothing to explain yet." };
+      }
+
+      case "explain_code": {
+        const path = normalizeWorkspacePath(args.path || args.name || "");
+        if (!path) return { success: false, message: "No file path specified" };
+
+        const node = findNodeByPath(fileStore.files, path);
+        if (!node) return { success: false, message: `File not found: ${path}` };
+
+        if (!node.content) return { success: true, message: `File ${path} is empty.` };
+
+        // Return structured context for follow-up AI explanation
+        return {
+          success: true,
+          message: `__explain_code__\nFile: ${path}\n\n${node.content.slice(0, 6000)}`,
+        };
+      }
+
       default:
         return { success: false, message: `Unknown tool: ${tool}` };
     }
@@ -362,6 +409,35 @@ function findNodeByPath(
   return undefined;
 }
 
+/** Priority file patterns for project overview (when no README) */
+const KEY_FILE_PATTERNS = [
+  /^package\.json$/i,
+  /^(main|index|app)\.(ts|tsx|js|jsx|py|go)$/i,
+  /^requirements\.txt$/i,
+  /^(cargo|go)\.(toml|mod)$/i,
+];
+
+function collectKeyFileContents(
+  nodes: import("@/store/file-store").FileNode[],
+  maxFiles: number,
+  parentPath = "",
+  results: { path: string; content: string }[] = []
+): { path: string; content: string }[] {
+  for (const node of nodes) {
+    if (results.length >= maxFiles) break;
+    const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+    if (node.type === "file" && node.content) {
+      if (KEY_FILE_PATTERNS.some((p) => p.test(node.name))) {
+        results.push({ path: fullPath, content: node.content });
+      }
+    }
+    if (node.children) {
+      collectKeyFileContents(node.children, maxFiles, fullPath, results);
+    }
+  }
+  return results;
+}
+
 function buildFileListing(nodes: import("@/store/file-store").FileNode[], depth: number): string {
   let result = "";
   for (const node of nodes) {
@@ -380,5 +456,5 @@ function buildFileListing(nodes: import("@/store/file-store").FileNode[], depth:
  * Safe read-only actions like read_file and list_files are auto-approved.
  */
 export function requiresApproval(tool: AgentToolName): boolean {
-  return !["read_file", "list_files"].includes(tool);
+  return !["read_file", "list_files", "explain_project", "explain_code"].includes(tool);
 }

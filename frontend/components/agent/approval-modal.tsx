@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, X, FileText, FolderPlus, Trash2, Pencil, Eye, List, Shield, Zap } from "lucide-react";
+import { Check, X, FileText, FolderPlus, Trash2, Pencil, Eye, List, Shield, Zap, BookOpen, FileCode } from "lucide-react";
 import { useAgentStore, type AgentAction, type AgentToolName } from "@/store/agent-store";
 import { useAppStore } from "@/store/app-store";
 import { heroThemeMap } from "@/themes/superheroes";
@@ -10,16 +10,19 @@ import { cn } from "@/lib/utils";
 const TOOL_ICONS: Record<AgentToolName, typeof FileText> = {
   create_file: FileText, create_folder: FolderPlus, delete_file: Trash2,
   modify_file: Pencil, read_file: Eye, list_files: List,
+  explain_project: BookOpen, explain_code: FileCode,
 };
 
 const TOOL_LABELS: Record<AgentToolName, string> = {
   create_file: "Create File", create_folder: "Create Folder", delete_file: "Delete File",
   modify_file: "Modify File", read_file: "Read File", list_files: "List Files",
+  explain_project: "Explain Project", explain_code: "Explain Code",
 };
 
 const TOOL_RISK: Record<AgentToolName, "safe" | "warning" | "danger"> = {
   create_file: "safe", create_folder: "safe", delete_file: "danger",
   modify_file: "warning", read_file: "safe", list_files: "safe",
+  explain_project: "safe", explain_code: "safe",
 };
 
 function ActionCard({ action, color }: { action: AgentAction; color: string }) {

@@ -5,6 +5,7 @@ import { Play, Loader2, Code2, X } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { CodeEditor } from "@/components/ide/code-editor";
+import { FilePreview } from "@/components/ide/file-preview";
 import { TerminalOutput } from "@/components/ide/terminal-output";
 import { runCode, writeWorkspaceFile } from "@/services/api";
 import { useAppStore } from "@/store/app-store";
@@ -88,6 +89,7 @@ export function EditorPanel() {
   }, [activeFile, activeFilePath, code]);
 
   const displayLanguage = activeFile?.language || language;
+  const isNonTextFile = activeFile?.fileType && activeFile.fileType !== "text";
 
   const handleCodeChange = (value: string) => {
     setCode(value);
@@ -187,14 +189,26 @@ export function EditorPanel() {
         </button>
       </div>
 
-      {/* Code editor */}
+      {/* Code editor or file preview */}
       <div className="min-h-0 flex-1">
-        <CodeEditor
-          language={displayLanguage}
-          path={activeFilePath}
-          value={code}
-          onChange={handleCodeChange}
-        />
+        {isNonTextFile && activeFile ? (
+          <FilePreview
+            node={{
+              name: activeFile.name,
+              content: activeFile.content,
+              fileType: activeFile.fileType,
+              mimeType: activeFile.mimeType,
+              size: undefined,
+            }}
+          />
+        ) : (
+          <CodeEditor
+            language={displayLanguage}
+            path={activeFilePath}
+            value={code}
+            onChange={handleCodeChange}
+          />
+        )}
       </div>
 
       {/* Terminal */}

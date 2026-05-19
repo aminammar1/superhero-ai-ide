@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Mic, MicOff, Send, Radio, MessageSquare, ArrowUp, Square } from "lucide-react";
+import { Loader2, Mic, MicOff, Send, Radio, MessageSquare, ArrowUp, Square, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { AvatarStage } from "@/components/agent/avatar-stage";
 import { ChatMessageBubble } from "@/components/agent/chat-message";
-import { requestTextToSpeech, streamChat } from "@/services/api";
+import { requestTextToSpeech, streamChat, streamExplain } from "@/services/api";
 import { useAppStore, type VoiceMode } from "@/store/app-store";
 import { useFileStore } from "@/store/file-store";
 import { useAgentStore } from "@/store/agent-store";
@@ -30,6 +30,12 @@ const TASK_PROMPT_HINTS = [
   "create", "scaffold", "generate", "build", "make", "setup", "set up",
   "modify", "edit", "fix", "delete", "write", "add file", "run", "install",
   "import repo", "clone",
+];
+
+const EXPLAIN_PROMPT_HINTS = [
+  "explain", "what does", "what is this", "tell me about", "how does",
+  "describe", "overview", "summary", "what is the project", "about this",
+  "what's in", "summarize", "codebase", "walk me through", "@",
 ];
 
 function pickModelForPrompt(prompt: string, chatModel: string, codeModel: string): string {
@@ -281,7 +287,7 @@ export function AgentPanel() {
 
   const [chatInput, setChatInput] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [streamMode, setStreamMode] = useState<"chat" | "task">("chat");
+  const [streamMode, setStreamMode] = useState<"chat" | "task" | "explain">("chat");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const welcomePlayedRef = useRef(false);
   const speechTranscriptRef = useRef("");
@@ -425,33 +431,87 @@ export function AgentPanel() {
 
       const finalText = useAppStore.getState().messages.find((m) => m.id === aId)?.content ?? "";
       const { cleanText, toolCalls } = parseToolCalls(finalText);
-      const assistantSummary = summarizeAssistantOutput(cleanText, toolCalls.length);
-      useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: assistantSummary } : msg) }));
-      addTaskContext(`User: ${prompt.slice(0, 50)} -> ${assistantSummary.slice(0, 50)}`);
+
       if (toolCalls.length > 0) {
-        // Separate auto-exec tools from approval-needed tools
-        const autoTools = toolCalls.filter((tc) => !requiresApproval(tc.tool));
+        // Split tools into categories
+        const explainTools = toolCalls.filter((tc) => tc.tool === "explain_project" || tc.tool === "explain_code");
+        const autoTools = toolCalls.filter((tc) => !requiresApproval(tc.tool) && tc.tool !== "explain_project" && tc.tool !== "explain_code");
         const approvalTools = toolCalls.filter((tc) => requiresApproval(tc.tool));
 
-        // Show action indicators for auto-exec tools
-        if (autoTools.length > 0) {
-          const toolMsgId = crypto.randomUUID();
-          pushActionMessage(toolMsgId, autoTools.map((tc) => ({
-            type: toolToActionType(tc.tool), label: toolToLabel(tc.tool),
-            fileName: tc.args.path || tc.args.name, status: "running" as const,
-          })));
-          for (let i = 0; i < autoTools.length; i++) {
-            const r = await executeToolCall(autoTools[i]);
-            updateActionStatus(toolMsgId, i, r.success ? "done" : "error");
-          }
-        }
+        // Handle explain tools — read-only, then follow-up with dedicated explain endpoint
+        if (explainTools.length > 0) {
+          // Replace the initial message with a reading indicator
+          const readingLabel = explainTools[0].tool === "explain_project" ? "Analyzing project..." : `Reading ${explainTools[0].args.path || "file"}...`;
+          setStreamMode("explain");
+          useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: readingLabel } : msg) }));
 
-        // Queue approval-needed tools
-        for (const tc of approvalTools) {
-          queueAction(tc);
+          // Execute explain tool (read-only — no writes)
+          const explainResult = await executeToolCall(explainTools[0]);
+
+          if (explainResult.success && explainResult.message.startsWith("__explain_")) {
+            const isProjectExplain = explainResult.message.startsWith("__explain_project__");
+            const contextData = explainResult.message.replace(/^__explain_(project|code)__\n/, "");
+            const explainPrompt = isProjectExplain
+              ? `Based on the following project info, give a short summary of what this project is and its tech stack. Max 2-3 sentences.\n\n${contextData}`
+              : `Explain this code briefly: what it does and why. Max 2-3 sentences.\n\n${contextData}`;
+
+            // Replace the reading message with the streamed explanation
+            useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: "" } : msg) }));
+            try {
+              await streamExplain(
+                { prompt: explainPrompt, heroTheme: theme, model },
+                (chunk) => appendAssistantChunk(aId, chunk),
+                controller.signal,
+              );
+            } catch {
+              // If explain endpoint fails, show a fallback
+              useAppStore.setState((s) => ({
+                messages: s.messages.map((msg) => msg.id === aId && !msg.content
+                  ? { ...msg, content: "Couldn't generate explanation. Try again." }
+                  : msg
+                ),
+              }));
+            }
+            const explainText = useAppStore.getState().messages.find((m) => m.id === aId)?.content ?? "";
+            addTaskContext(`User: ${prompt.slice(0, 50)} -> explained`);
+            if (usesVoiceOutput && explainText) await playVoice(explainText);
+          } else {
+            // Explain tool returned a simple message (e.g., "Workspace is empty")
+            useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: explainResult.message } : msg) }));
+            if (usesVoiceOutput) await playVoice(explainResult.message);
+          }
+        } else {
+          // Non-explain flow — normal tool processing
+          const assistantSummary = summarizeAssistantOutput(cleanText, toolCalls.length);
+          useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: assistantSummary } : msg) }));
+          addTaskContext(`User: ${prompt.slice(0, 50)} -> ${assistantSummary.slice(0, 50)}`);
+
+          // Show action indicators for auto-exec tools
+          if (autoTools.length > 0) {
+            const toolMsgId = crypto.randomUUID();
+            pushActionMessage(toolMsgId, autoTools.map((tc) => ({
+              type: toolToActionType(tc.tool), label: toolToLabel(tc.tool),
+              fileName: tc.args.path || tc.args.name, status: "running" as const,
+            })));
+            for (let i = 0; i < autoTools.length; i++) {
+              const r = await executeToolCall(autoTools[i]);
+              updateActionStatus(toolMsgId, i, r.success ? "done" : "error");
+            }
+          }
+
+          // Queue approval-needed tools
+          for (const tc of approvalTools) {
+            queueAction(tc);
+          }
+          if (usesVoiceOutput) await playVoice(assistantSummary);
         }
+      } else {
+        // No tool calls — just a chat response
+        const assistantSummary = summarizeAssistantOutput(cleanText, 0);
+        useAppStore.setState((s) => ({ messages: s.messages.map((msg) => msg.id === aId ? { ...msg, content: assistantSummary } : msg) }));
+        addTaskContext(`User: ${prompt.slice(0, 50)} -> ${assistantSummary.slice(0, 50)}`);
+        if (usesVoiceOutput) await playVoice(assistantSummary);
       }
-      if (usesVoiceOutput) await playVoice(assistantSummary);
     } catch (e) {
       if (controller.signal.aborted) return;
       toast.error(e instanceof Error ? e.message : "Failed.");
@@ -533,6 +593,17 @@ export function AgentPanel() {
             {voiceMode === "voice-voice" ? "Voice" : "Text"}
           </button>
           <div className="flex-1" />
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => useAppStore.getState().clearMessages()}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[9px] text-white/20 hover:bg-red-500/10 hover:text-red-400/60 transition"
+              title="Clear chat"
+            >
+              <Trash2 className="h-2.5 w-2.5" />
+              Clear
+            </button>
+          )}
           <ModelSelector value={chatModel} onChange={handleModelChange} accentColor={hero.palette[0]} />
         </div>
 

@@ -2,11 +2,14 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { openDB, type IDBPDatabase } from "idb";
 import type { Language } from "@/lib/types";
 import {
   detectLanguageFromName,
   normalizeGeneratedCode,
   normalizeWorkspacePath,
+  detectFileType,
+  type FileType,
 } from "@/lib/code-format";
 
 export interface FileNode {
@@ -15,6 +18,8 @@ export interface FileNode {
   type: "file" | "folder";
   language?: Language;
   content?: string;
+  fileType?: FileType;
+  mimeType?: string;
   children?: FileNode[];
   parentId: string | null;
 }
@@ -52,6 +57,8 @@ export interface ImportEntry {
   type: "file" | "folder";
   size?: number;
   content?: string;
+  fileType?: FileType;
+  mimeType?: string;
   children?: ImportEntry[];
 }
 
@@ -239,15 +246,128 @@ function convertImportTree(
         children: entry.children ? convertImportTree(entry.children, id, pathToId) : [],
       };
     }
+
+    const detectedFileType = entry.fileType || detectFileType(entry.name);
     return {
       id,
       name: entry.name,
       type: "file" as const,
       parentId,
       language: detectLanguage(entry.name),
+      fileType: detectedFileType,
+      mimeType: entry.mimeType,
       content: entry.content !== undefined ? normalizeGeneratedCode(path, entry.content) : "",
     };
   });
+}
+
+/* ────────────────────────────────────────────
+   IndexedDB storage for file contents
+   localStorage only holds tree structure (no content)
+   ──────────────────────────────────────────── */
+const IDB_NAME = "superhero-fs-idb";
+const IDB_VERSION = 1;
+const IDB_STORE = "file-contents";
+
+let _idb: IDBPDatabase | null = null;
+
+async function getIDB(): Promise<IDBPDatabase> {
+  if (_idb) return _idb;
+  _idb = await openDB(IDB_NAME, IDB_VERSION, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    },
+  });
+  return _idb;
+}
+
+/** Persist all file contents to IndexedDB (batched). */
+async function persistContentsToIDB(files: FileNode[]): Promise<void> {
+  try {
+    const db = await getIDB();
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    const store = tx.objectStore(IDB_STORE);
+    // Clear old entries and write fresh
+    await store.clear();
+    const entries = collectFileContents(files);
+    for (const [id, content] of entries) {
+      store.put(content, id);
+    }
+    await tx.done;
+  } catch (e) {
+    console.warn("[file-store] IDB persist failed:", e);
+  }
+}
+
+/** Load file contents from IndexedDB into the tree. */
+async function hydrateContentsFromIDB(files: FileNode[]): Promise<FileNode[]> {
+  try {
+    const db = await getIDB();
+    const tx = db.transaction(IDB_STORE, "readonly");
+    const store = tx.objectStore(IDB_STORE);
+    const allKeys = await store.getAllKeys();
+    const contentMap = new Map<string, string>();
+    for (const key of allKeys) {
+      const val = await store.get(key);
+      if (typeof val === "string") {
+        contentMap.set(key as string, val);
+      }
+    }
+    return injectContents(files, contentMap);
+  } catch (e) {
+    console.warn("[file-store] IDB hydrate failed:", e);
+    return files;
+  }
+}
+
+function collectFileContents(nodes: FileNode[], out: [string, string][] = []): [string, string][] {
+  for (const node of nodes) {
+    if (node.type === "file" && node.content) {
+      out.push([node.id, node.content]);
+    }
+    if (node.children) {
+      collectFileContents(node.children, out);
+    }
+  }
+  return out;
+}
+
+function injectContents(nodes: FileNode[], contentMap: Map<string, string>): FileNode[] {
+  return nodes.map((node) => {
+    if (node.type === "file") {
+      const content = contentMap.get(node.id);
+      return content !== undefined ? { ...node, content } : node;
+    }
+    if (node.children) {
+      return { ...node, children: injectContents(node.children, contentMap) };
+    }
+    return node;
+  });
+}
+
+/** Strip file content from tree for lightweight localStorage persistence. */
+function stripContents(nodes: FileNode[]): FileNode[] {
+  return nodes.map((node) => {
+    if (node.type === "file") {
+      const { content: _content, ...rest } = node;
+      return rest as FileNode;
+    }
+    if (node.children) {
+      return { ...node, children: stripContents(node.children) };
+    }
+    return node;
+  });
+}
+
+// Debounced IDB write — avoids thrashing on rapid edits
+let _idbWriteTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleIDBPersist(files: FileNode[]) {
+  if (_idbWriteTimer) clearTimeout(_idbWriteTimer);
+  _idbWriteTimer = setTimeout(() => {
+    void persistContentsToIDB(files);
+  }, 500);
 }
 
 export const useFileStore = create<FileStore>()(
@@ -273,18 +393,23 @@ export const useFileStore = create<FileStore>()(
             type,
             parentId,
             language: type === "file" ? detectLanguage(name) : undefined,
+            fileType: type === "file" ? detectFileType(name) : undefined,
             content: type === "file" ? "" : undefined,
             children: type === "folder" ? [] : undefined,
           };
           const expanded = new Set(state.expandedFolders);
           if (parentId) expanded.add(parentId);
-          return { files: insertNode(state.files, parentId, newNode), expandedFolders: expanded };
+          const files = insertNode(state.files, parentId, newNode);
+          scheduleIDBPersist(files);
+          return { files, expandedFolders: expanded };
         }),
       deleteNode: (id) =>
         set((state) => {
           const removedIds = collectSubtreeIds(state.files, id);
+          const files = removeNode(state.files, id);
+          scheduleIDBPersist(files);
           return {
-            files: removeNode(state.files, id),
+            files,
             activeFileId:
               state.activeFileId && removedIds.has(state.activeFileId)
                 ? null
@@ -300,9 +425,11 @@ export const useFileStore = create<FileStore>()(
           })),
         })),
       updateFileContent: (id, content) =>
-        set((state) => ({
-          files: updateNode(state.files, id, (n) => ({ ...n, content })),
-        })),
+        set((state) => {
+          const files = updateNode(state.files, id, (n) => ({ ...n, content }));
+          scheduleIDBPersist(files);
+          return { files };
+        }),
       getFileById: (id) => findNode(get().files, id),
 
       loadFromImportTree: (tree) => {
@@ -310,6 +437,7 @@ export const useFileStore = create<FileStore>()(
         const files = convertImportTree(tree, null, pathToId);
         // Auto-expand top-level folders
         const topFolders = new Set(files.filter((f) => f.type === "folder").map((f) => f.id));
+        scheduleIDBPersist(files);
         set({ files, activeFileId: null, expandedFolders: topFolders });
       },
 
@@ -329,6 +457,7 @@ export const useFileStore = create<FileStore>()(
           if (id) expandedFolders.add(id);
         }
 
+        scheduleIDBPersist(files);
         set({
           files,
           activeFileId: activePath ? pathToId.get(activePath) ?? null : null,
@@ -337,9 +466,10 @@ export const useFileStore = create<FileStore>()(
       },
     }),
     {
-      name: "superhero-fs-storage-v2",
+      name: "superhero-fs-storage-v3",
       partialize: (state) => ({
-        files: state.files,
+        // Only persist tree structure without file contents — contents go to IndexedDB
+        files: stripContents(state.files),
         activeFileId: state.activeFileId,
         expandedFolders: Array.from(state.expandedFolders),
       }),
@@ -349,6 +479,30 @@ export const useFileStore = create<FileStore>()(
         files: persistedState?.files ? sortFileNodes(persistedState.files) : currentState.files,
         expandedFolders: new Set(persistedState?.expandedFolders || []),
       }),
+      onRehydrateStorage: () => {
+        return (state, error) => {
+          if (error) {
+            console.warn("[file-store] rehydrate error:", error);
+            return;
+          }
+          // Defer IDB hydration to avoid referencing useFileStore before initialization
+          const filesToHydrate = state?.files ?? [];
+          if (filesToHydrate.length > 0) {
+            setTimeout(() => {
+              void hydrateContentsFromIDB(filesToHydrate).then((hydrated) => {
+                useFileStore.setState({ files: sortFileNodes(hydrated) });
+              });
+            }, 0);
+          }
+        };
+      },
     }
   )
 );
+
+// Clean up old localStorage keys
+if (typeof window !== "undefined") {
+  try {
+    window.localStorage.removeItem("superhero-fs-storage-v2");
+  } catch { /* ignore */ }
+}

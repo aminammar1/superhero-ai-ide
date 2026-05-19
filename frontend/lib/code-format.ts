@@ -32,7 +32,134 @@ const EXTENSION_LANGUAGE: Record<string, Language> = {
   sh: "bash",
   bash: "bash",
   zsh: "bash",
+  fish: "bash",
+  lua: "bash",
+  md: "bash",
+  mdx: "bash",
+  txt: "bash",
+  log: "bash",
+  csv: "bash",
+  env: "bash",
+  xml: "html",
+  yaml: "bash",
+  yml: "bash",
+  toml: "bash",
+  sql: "bash",
+  graphql: "bash",
+  gql: "bash",
+  vue: "html",
+  svelte: "html",
+  astro: "html",
+  prisma: "bash",
+  scala: "java",
+  kt: "java",
+  kts: "java",
+  dart: "javascript",
+  cs: "cpp",
+  fs: "bash",
+  fsx: "bash",
+  hs: "bash",
+  clj: "bash",
+  ex: "bash",
+  exs: "bash",
+  erl: "bash",
+  hrl: "bash",
+  r: "bash",
+  rmd: "bash",
+  proto: "bash",
+  thrift: "bash",
+  dockerfile: "bash",
+  makefile: "bash",
+  cmake: "bash",
+  mod: "go",
+  sum: "bash",
+  lock: "bash",
+  cfg: "bash",
+  ini: "bash",
+  conf: "bash",
+  diff: "bash",
+  patch: "bash",
 };
+
+/** Exact filename → language for files that don't use extensions */
+const FILENAME_LANGUAGE: Record<string, Language> = {
+  dockerfile: "bash",
+  makefile: "bash",
+  cmakelists: "bash",
+  gemfile: "ruby",
+  rakefile: "ruby",
+  procfile: "bash",
+  vagrantfile: "ruby",
+  justfile: "bash",
+  brewfile: "ruby",
+};
+
+/** Dot-prefixed filenames that should be treated as text/config */
+const DOTFILE_LANGUAGE: Record<string, Language> = {
+  ".gitignore": "bash",
+  ".gitattributes": "bash",
+  ".gitmodules": "bash",
+  ".dockerignore": "bash",
+  ".editorconfig": "bash",
+  ".prettierrc": "json",
+  ".eslintrc": "json",
+  ".babelrc": "json",
+  ".npmrc": "bash",
+  ".nvmrc": "bash",
+  ".env": "bash",
+  ".env.local": "bash",
+  ".env.example": "bash",
+  ".env.development": "bash",
+  ".env.production": "bash",
+  ".env.test": "bash",
+  ".prettierignore": "bash",
+  ".eslintignore": "bash",
+  ".browserslistrc": "bash",
+  ".yarnrc": "bash",
+  ".tool-versions": "bash",
+  ".ruby-version": "bash",
+  ".node-version": "bash",
+  ".python-version": "bash",
+};
+
+export type FileType = "text" | "image" | "binary" | "unknown";
+
+export function detectLanguageFromName(name: string): Language | undefined {
+  const lower = name.toLowerCase();
+
+  // Check exact filename matches (Dockerfile, Makefile, etc.)
+  if (FILENAME_LANGUAGE[lower]) return FILENAME_LANGUAGE[lower];
+
+  // Check dotfile matches (.gitignore, .dockerignore, .env, etc.)
+  if (DOTFILE_LANGUAGE[lower]) return DOTFILE_LANGUAGE[lower];
+
+  // Check dotfile prefix patterns (.env.something)
+  if (lower.startsWith(".env")) return "bash";
+
+  const ext = lower.split(".").pop();
+  return ext ? EXTENSION_LANGUAGE[ext] : undefined;
+}
+
+export function detectFileType(name: string): FileType {
+  const lower = name.toLowerCase();
+
+  // Extensionless files that are text
+  if (FILENAME_LANGUAGE[lower]) return "text";
+  // Dotfiles that are text
+  if (DOTFILE_LANGUAGE[lower]) return "text";
+  if (lower.startsWith(".env")) return "text";
+
+  const ext = lower.split(".").pop();
+  if (!ext) return "text"; // Default extensionless files to text
+
+  const imageExts = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "avif", "svg", "ico"];
+  const binaryExts = ["pdf", "zip", "tar", "gz", "bz2", "xz", "7z", "rar", "woff", "woff2", "ttf", "eot", "otf", "mp3", "wav", "ogg", "flac", "aac", "m4a", "mp4", "webm", "avi", "mov", "mkv", "wasm", "exe", "dll", "so", "dylib", "o", "a", "class", "jar", "war", "pyc", "pyo", "pyd"];
+
+  if (imageExts.includes(ext)) return "image";
+  if (binaryExts.includes(ext)) return "binary";
+  if (EXTENSION_LANGUAGE[ext]) return "text";
+  return "text";
+}
 
 const TWO_SPACE_LANGUAGES = new Set<Language>([
   "typescript",
@@ -41,11 +168,6 @@ const TWO_SPACE_LANGUAGES = new Set<Language>([
   "css",
   "json",
 ]);
-
-export function detectLanguageFromName(name: string): Language | undefined {
-  const ext = name.split(".").pop()?.toLowerCase();
-  return ext ? EXTENSION_LANGUAGE[ext] : undefined;
-}
 
 export function normalizeWorkspacePath(path: string): string {
   return path

@@ -85,6 +85,8 @@ TOOLS:
 [TOOL:modify_file(path="src/app.ts", content="// new content")]
 [TOOL:read_file(path="src/index.ts")]
 [TOOL:list_files()]
+[TOOL:explain_project()]
+[TOOL:explain_code(path="src/index.ts")]
 
 TOOL RULES:
 - Use TOOL format for any file/folder operation. Always.
@@ -93,6 +95,14 @@ TOOL RULES:
 - Use clean project paths, for example package.json, src/App.tsx, src/main.tsx, src/styles.css.
 - Never put the whole generated source code outside TOOL content.
 - After tool tags, one short confirmation. Nothing else.
+
+EXPLANATION TOOLS:
+- explain_project(): Call when user asks about the overall project, what it does, its structure, or how it works. This reads README.md if available and summarizes the project.
+- explain_code(path="..."): Call when user asks to explain a specific file or code. Reads the file and provides a clear explanation.
+- When user says "explain this file", "what does X do", "explain the code in X", "tell me about file.ts", "@file.ts", "what's in main.py", use explain_code with the file path.
+- When user mentions a filename with @ prefix like "@utils.ts" or "@src/app.tsx", use explain_code with that path.
+- When user says "explain the project", "what is this about", "tell me about this repo", "what does this project do", "overview", "summarize this codebase", use explain_project.
+- IMPORTANT: When using explain tools, output ONLY the tool call and nothing else. The system will handle generating the explanation. Do not write your own explanation.
 
 PROJECT SCAFFOLDING:
 When user asks to create a project (React, Next.js, Express, Flask, etc), create ALL necessary files:
@@ -790,6 +800,94 @@ async def chat_stream(request: ChatRequest):
                     yield final_text[i:end+1]
                     i = end + 1
                     continue
+            chunk_size = 3 if final_text[i] in (" ", "\n") else 2
+            end = min(i + chunk_size, length)
+            yield final_text[i:end]
+            i = end
+            await asyncio.sleep(0.012)
+
+    return StreamingResponse(streamer(), media_type="text/plain")
+
+
+EXPLAIN_SYSTEM_PROMPT = """You are the AI co-pilot inside SuperHero AI IDE.
+Tone: {persona}.
+
+You are in EXPLANATION MODE. Explain code or a project.
+
+RULES:
+1. MAX 2-3 sentences. Never more.
+2. State what it does and the key tech used. Skip obvious details.
+3. No [TOOL:...] tags. No file operations. No code blocks. No markdown. No bullet lists.
+4. Go straight to the point. Zero filler.
+"""
+
+
+class ExplainRequest(BaseModel):
+    prompt: str
+    heroTheme: str
+    model: str | None = None
+
+
+@app.post("/chat/explain")
+async def chat_explain(request: ExplainRequest):
+    """Dedicated explain endpoint — no tool calls, just clear explanation."""
+    selected_model = (request.model or "").strip() or None
+    persona = THEME_PERSONAS.get(request.heroTheme, "helpful")
+    system_prompt = EXPLAIN_SYSTEM_PROMPT.format(persona=persona)
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": request.prompt},
+    ]
+
+    ar_models = agentrouter_model_chain(selected_model, "chat")
+    nvidia_models = nvidia_model_chain(selected_model, "chat")
+    try:
+        openrouter_models = openrouter_model_chain(selected_model, "chat")
+    except OpenRouterNonFreeModel:
+        openrouter_models = []
+
+    final_text: str | None = None
+    providers = provider_sequence(selected_model, "openrouter")
+
+    for provider in providers:
+        if provider == "agentrouter":
+            if not ar_models:
+                continue
+            try:
+                final_text = await agentrouter_chat(messages, ar_models)
+                break
+            except Exception as exc:
+                logger.warning("AgentRouter explain failed: %s", exc)
+                continue
+        if provider == "openrouter":
+            if not openrouter_models:
+                continue
+            try:
+                final_text = await openrouter_chat(messages, openrouter_models)
+                break
+            except Exception as exc:
+                logger.warning("OpenRouter explain failed: %s", exc)
+            continue
+        if provider == "nvidia":
+            try:
+                final_text = await nvidia_chat(messages, nvidia_models)
+                break
+            except Exception as exc:
+                logger.warning("NVIDIA explain failed: %s", exc)
+            continue
+
+    if final_text is None:
+        final_text = "Unable to generate explanation. The AI providers are currently unavailable."
+
+    # Strip any accidental tool calls from the response
+    import re
+    final_text = re.sub(r'\[TOOL:[^\]]*\]', '', final_text).strip()
+
+    async def streamer() -> AsyncIterator[str]:
+        i = 0
+        length = len(final_text)
+        while i < length:
             chunk_size = 3 if final_text[i] in (" ", "\n") else 2
             end = min(i + chunk_size, length)
             yield final_text[i:end]

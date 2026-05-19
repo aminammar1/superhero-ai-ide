@@ -121,6 +121,51 @@ export async function streamChat(
   }
 }
 
+/**
+ * Stream an explanation from the AI (dedicated endpoint — no tool calls, no workspace mutations).
+ */
+export async function streamExplain(
+  payload: {
+    prompt: string;
+    heroTheme: HeroTheme;
+    model?: string;
+  },
+  onChunk: (chunk: string) => void,
+  signal?: AbortSignal,
+) {
+  const token = useAppStore.getState().token;
+  const response = await fetch(`${baseURL}/api/chat/explain`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error("The AI service did not return a stream.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      onChunk(decoder.decode(value, { stream: true }));
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      reader.cancel();
+      return;
+    }
+    throw err;
+  }
+}
+
 /* ═══════════════════════════════════════════════
    WORKSPACE FILESYSTEM API
    ═══════════════════════════════════════════════ */

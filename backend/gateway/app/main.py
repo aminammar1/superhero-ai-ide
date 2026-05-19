@@ -155,6 +155,37 @@ async def chat_stream(
     return StreamingResponse(streamer(), media_type="text/plain")
 
 
+@app.post("/api/chat/explain")
+async def chat_explain(
+    payload: dict, authorization: Annotated[str | None, Header()] = None
+):
+    """Proxy explain requests to AI service (separate system prompt, no tools)."""
+    headers = {"Authorization": authorization} if authorization else {}
+    client = httpx.AsyncClient(timeout=120.0)
+    req = client.build_request(
+        "POST",
+        f"{settings.ai_service_url}/chat/explain",
+        json=payload,
+        headers=headers,
+    )
+    response = await client.send(req, stream=True)
+
+    if response.is_error:
+        detail = await response.aread()
+        await client.aclose()
+        raise HTTPException(response.status_code, detail.decode())
+
+    async def streamer() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+            await client.aclose()
+
+    return StreamingResponse(streamer(), media_type="text/plain")
+
+
 @app.post("/api/voice/tts")
 async def voice_tts(
     payload: dict, authorization: Annotated[str | None, Header()] = None

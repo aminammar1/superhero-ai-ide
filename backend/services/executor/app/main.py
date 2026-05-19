@@ -22,7 +22,10 @@ SHELL_TIMEOUT_SECONDS = 300
 NPM_TIMEOUT_SECONDS = 900
 
 PACKAGE_MANAGER_CMDS = frozenset({"npm", "npx", "yarn", "pnpm", "pip", "pip3", "go", "cargo", "mvn", "gradle"})
-LONG_RUNNING_ARGS = frozenset({"install", "i", "ci", "add", "create", "init", "build", "run", "dev", "start", "serve"})
+LONG_RUNNING_ARGS = frozenset({
+    "install", "i", "ci", "add", "create", "init", "build", "run", "dev",
+    "start", "serve", "tidy", "get", "mod", "update", "fetch", "test",
+})
 PACKAGE_MANAGER_MARKERS = (
     "npm ",
     "npx ",
@@ -352,13 +355,39 @@ async def workspace_write(req: WriteFileRequest):
 
 @app.get("/workspace/read")
 async def workspace_read(path: str):
-    """Read a file from the workspace."""
+    """Read a file from the workspace. Returns text content or base64-encoded binary."""
     target = _safe_workspace_path(path)
     if target is None:
         return {"success": False, "error": "Path traversal blocked"}
     if not target.exists():
         return {"success": False, "error": f"File not found: {path}"}
-    return {"success": True, "content": target.read_text(encoding="utf-8")}
+
+    ext = target.suffix.lower()
+    file_size = target.stat().st_size
+
+    if (ext in TEXT_EXTENSIONS or _is_text_filename(target.name)) and file_size < MAX_CONTENT_SIZE:
+        content = target.read_text(encoding="utf-8", errors="replace")
+        return {"success": True, "content": content, "fileType": "text"}
+
+    if ext in IMAGE_EXTENSIONS and file_size < MAX_BINARY_SIZE:
+        import base64
+        data = target.read_bytes()
+        return {
+            "success": True,
+            "content": base64.b64encode(data).decode("ascii"),
+            "fileType": "image",
+            "mimeType": _get_mime_type(ext),
+        }
+
+    if file_size < MAX_BINARY_SIZE:
+        return {
+            "success": True,
+            "fileType": "binary",
+            "mimeType": _get_mime_type(ext),
+            "size": file_size,
+        }
+
+    return {"success": False, "error": f"File too large: {file_size} bytes"}
 
 
 @app.get("/workspace/list")
@@ -401,6 +430,8 @@ async def workspace_delete(path: str):
         return {"success": False, "error": f"Not found: {path}"}
     if target.is_dir():
         shutil.rmtree(target)
+        if target == WORKSPACE_ROOT:
+            WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
     else:
         target.unlink()
     return {"success": True}
@@ -480,6 +511,15 @@ def _has_long_running_package_arg(command: str, cmd_parts: list[str]) -> bool:
             " pnpm add",
             " pnpm install",
             " pip install",
+            " go mod",
+            " go get",
+            " go build",
+            " go test",
+            " cargo build",
+            " cargo install",
+            " cargo test",
+            " cargo fetch",
+            " rustup",
         )
     )
 
@@ -512,13 +552,38 @@ async def workspace_shell(req: ShellRequest):
         env["npm_config_yes"] = "true"
         env["npm_config_fund"] = "false"
         env["npm_config_audit"] = "false"
+
+        # Go environment
+        go_path = WORKSPACE_ROOT / ".go"
+        go_path.mkdir(parents=True, exist_ok=True)
+        env["GOPATH"] = str(go_path)
+        env["GOMODCACHE"] = str(go_path / "pkg" / "mod")
+        env["GOFLAGS"] = "-modcacherw"
+
+        # Cargo/Rust environment
+        cargo_home = WORKSPACE_ROOT / ".cargo"
+        cargo_home.mkdir(parents=True, exist_ok=True)
+        env["CARGO_HOME"] = str(cargo_home)
+        env["RUSTUP_HOME"] = str(WORKSPACE_ROOT / ".rustup")
+
+        # Build comprehensive PATH with all tool binary locations
         npm_global = WORKSPACE_ROOT / ".npm-global" / "bin"
         npm_global.mkdir(parents=True, exist_ok=True)
-        if "PATH" in env:
-            env["PATH"] = f"{npm_global}:/usr/local/bin:/usr/bin:/bin:{env['PATH']}"
+        extra_paths = [
+            str(npm_global),
+            str(go_path / "bin"),
+            str(cargo_home / "bin"),
+            "/usr/local/go/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+        ]
+        # Preserve existing system PATH but prepend our directories
+        system_path = env.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+        env["PATH"] = ":".join(extra_paths) + ":" + system_path
 
         wrap = command
-        if is_pkg_manager and base_cmd in ("npm", "npx", "yarn", "pnpm"):
+        if is_pkg_manager and base_cmd in ("npm", "npx", "yarn", "pnpm", "go", "cargo"):
             wrap = f"export HOME={WORKSPACE_ROOT} && {command}"
 
         if is_dev_server:
@@ -534,7 +599,8 @@ async def workspace_shell(req: ShellRequest):
 
             import select
             output_lines = []
-            deadline = time.monotonic() + 8
+            # Give dev servers more time to produce startup output
+            deadline = time.monotonic() + 15
             while time.monotonic() < deadline:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -545,10 +611,27 @@ async def workspace_shell(req: ShellRequest):
                         line = proc.stdout.readline()
                         if line:
                             output_lines.append(line)
+                            # If we see a URL, server is ready — capture a bit more then stop
+                            ll = line.lower()
+                            if "http://" in ll or "https://" in ll or "localhost" in ll or "ready in" in ll:
+                                # Read a few more lines for context
+                                extra_deadline = time.monotonic() + 2
+                                while time.monotonic() < extra_deadline:
+                                    r2, _, _ = select.select([proc.stdout], [], [], 0.3)
+                                    if r2:
+                                        extra = proc.stdout.readline()
+                                        if extra:
+                                            output_lines.append(extra)
+                                        else:
+                                            break
+                                    else:
+                                        break
+                                break
                         else:
                             break
                     else:
-                        if output_lines:
+                        # No output available, if we already have lines keep waiting a bit
+                        if output_lines and (time.monotonic() - deadline + 15) > 5:
                             break
                 else:
                     time.sleep(0.3)
@@ -572,12 +655,13 @@ async def workspace_shell(req: ShellRequest):
                     url_hint = line.strip()
                     break
 
-            status = f"Server started (PID {proc.pid})"
-            if not url_hint:
-                status += "\nProcess is running in the background."
+            status_line = f"── SERVER ONLINE (PID {proc.pid})"
+            if url_hint:
+                status_line += f" • {url_hint}"
+            status_line += " ──"
 
             return {
-                "stdout": f"{captured}\n── {status} ──\n",
+                "stdout": f"{captured}\n{status_line}\n",
                 "stderr": "",
                 "exit_code": 0,
                 "duration_ms": 0,
@@ -638,24 +722,68 @@ def _parse_github_url(url: str) -> tuple[str, str] | None:
 TEXT_EXTENSIONS = {
     ".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".java", ".c", ".cpp", ".h",
     ".hpp", ".rs", ".rb", ".php", ".swift", ".sh", ".bash", ".html", ".htm",
-    ".css", ".scss", ".less", ".json", ".xml", ".yaml", ".yml", ".toml",
-    ".md", ".txt", ".env", ".gitignore", ".dockerignore", ".editorconfig",
+    ".css", ".scss", ".less", ".json", ".jsonc", ".xml", ".yaml", ".yml", ".toml",
+    ".md", ".mdx", ".txt", ".env", ".gitignore", ".dockerignore", ".editorconfig",
     ".prettierrc", ".eslintrc", ".babelrc", ".lock", ".cfg", ".ini", ".conf",
     ".sql", ".graphql", ".vue", ".svelte", ".astro", ".prisma",
+    ".mjs", ".cjs", ".mts", ".cts", ".zsh", ".fish",
+    ".lua", ".r", ".rmd", ".scala", ".kt", ".kts", ".dart",
+    ".cs", ".fs", ".fsx", ".hs", ".clj", ".ex", ".exs", ".erl", ".hrl",
+    ".proto", ".thrift", ".avsc", ".graphqls", ".gql",
+    ".dockerfile", ".makefile", ".cmake", ".gradle", ".pom",
+    ".log", ".csv", ".tsv", ".diff", ".patch",
+    ".svg", ".ico", ".cur",
+    ".sum", ".mod",
 }
+
+BINARY_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".avif",
+    ".pdf",
+    ".zip", ".tar", ".gz", ".bz2", ".xz", ".7z", ".rar",
+    ".woff", ".woff2", ".ttf", ".eot", ".otf",
+    ".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a",
+    ".mp4", ".webm", ".avi", ".mov", ".mkv",
+    ".wasm",
+    ".exe", ".dll", ".so", ".dylib", ".o", ".a",
+    ".class", ".jar", ".war",
+    ".pyc", ".pyo", ".pyd",
+}
+
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".avif", ".svg", ".ico"}
 MAX_CONTENT_SIZE = 256 * 1024  # 256 KB
+MAX_BINARY_SIZE = 2 * 1024 * 1024  # 2 MB for base64-encoded binary files
+
+# Files that should be treated as text but don't have a recognized extension
+EXTENSIONLESS_TEXT_NAMES = frozenset({
+    "dockerfile", "makefile", "cmakelists", "gemfile", "rakefile",
+    "procfile", "vagrantfile", "justfile", "brewfile",
+    ".gitignore", ".gitattributes", ".gitmodules", ".dockerignore",
+    ".editorconfig", ".prettierrc", ".eslintrc", ".babelrc",
+    ".npmrc", ".nvmrc", ".prettierignore", ".eslintignore",
+    ".browserslistrc", ".yarnrc", ".tool-versions",
+    ".ruby-version", ".node-version", ".python-version",
+})
+
+def _is_text_filename(name: str) -> bool:
+    """Check if a file should be treated as text based on its full name."""
+    lower = name.lower()
+    if lower in EXTENSIONLESS_TEXT_NAMES:
+        return True
+    # .env and .env.* files
+    if lower == ".env" or lower.startswith(".env."):
+        return True
+    return False
 
 
 def _collect_tree(root: Path, base: Path) -> list[dict]:
-    """Recursively collect file tree for API response, including text file content."""
+    """Recursively collect file tree for API response, including text file content and binary file data."""
     entries = []
     try:
         def sort_key(path: Path):
             return (1 if path.is_file() else 0, path.name.lower())
 
         for item in sorted(root.iterdir(), key=sort_key):
-            # Skip generated or internal directories, but keep useful dotfiles like .gitignore.
-            if item.is_dir() and (item.name.startswith(".") or item.name in ("node_modules", "__pycache__", "dist", "build")):
+            if item.is_dir() and (item.name.startswith(".") or item.name in ("node_modules", "__pycache__", "dist", "build", "target", "vendor")):
                 continue
             rel = str(item.relative_to(base))
             if item.is_dir():
@@ -672,17 +800,59 @@ def _collect_tree(root: Path, base: Path) -> list[dict]:
                     "type": "file",
                     "size": item.stat().st_size,
                 }
-                # Include content for small text files
                 ext = item.suffix.lower()
-                if ext in TEXT_EXTENSIONS and item.stat().st_size < MAX_CONTENT_SIZE:
+
+                if (ext in TEXT_EXTENSIONS or _is_text_filename(item.name)) and item.stat().st_size < MAX_CONTENT_SIZE:
                     try:
                         entry["content"] = item.read_text(encoding="utf-8", errors="replace")
+                        entry["fileType"] = "text"
                     except Exception:
                         pass
+                elif ext in IMAGE_EXTENSIONS and item.stat().st_size < MAX_BINARY_SIZE:
+                    try:
+                        import base64
+                        data = item.read_bytes()
+                        entry["content"] = base64.b64encode(data).decode("ascii")
+                        entry["fileType"] = "image"
+                        entry["mimeType"] = _get_mime_type(ext)
+                    except Exception:
+                        pass
+                elif ext in BINARY_EXTENSIONS and item.stat().st_size < MAX_BINARY_SIZE:
+                    entry["fileType"] = "binary"
+                    entry["mimeType"] = _get_mime_type(ext)
+                else:
+                    # For unknown files without recognized extension, try reading as text
+                    if not ext and item.stat().st_size < MAX_CONTENT_SIZE:
+                        try:
+                            entry["content"] = item.read_text(encoding="utf-8", errors="replace")
+                            entry["fileType"] = "text"
+                        except Exception:
+                            entry["fileType"] = "unknown"
+                    else:
+                        entry["fileType"] = "unknown"
+
                 entries.append(entry)
     except PermissionError:
         pass
     return entries
+
+
+def _get_mime_type(ext: str) -> str:
+    mime_map = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+        ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+        ".tiff": "image/tiff", ".tif": "image/tiff", ".avif": "image/avif",
+        ".svg": "image/svg+xml", ".ico": "image/x-icon",
+        ".pdf": "application/pdf",
+        ".zip": "application/zip", ".tar": "application/x-tar",
+        ".gz": "application/gzip",
+        ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+        ".mp4": "video/mp4", ".webm": "video/webm",
+        ".woff": "font/woff", ".woff2": "font/woff2",
+        ".ttf": "font/ttf",
+        ".wasm": "application/wasm",
+    }
+    return mime_map.get(ext, "application/octet-stream")
 
 
 @app.post("/workspace/import-github")

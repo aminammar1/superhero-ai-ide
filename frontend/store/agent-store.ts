@@ -12,7 +12,9 @@ export type AgentToolName =
   | "delete_file"
   | "modify_file"
   | "read_file"
-  | "list_files";
+  | "list_files"
+  | "explain_project"
+  | "explain_code";
 
 export interface AgentToolCall {
   id: string;

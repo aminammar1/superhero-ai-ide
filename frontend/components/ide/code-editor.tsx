@@ -365,12 +365,38 @@ export function CodeEditor({
     monaco.editor.setTheme(getHeroThemeName(theme));
     monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
       allowNonTsExtensions: true,
+      allowJs: true,
       esModuleInterop: true,
       jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
       module: monaco.languages.typescript.ModuleKind.ESNext,
       moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
       resolveJsonModule: true,
       target: monaco.languages.typescript.ScriptTarget.Latest,
+      noEmit: true,
+      skipLibCheck: true,
+      strict: false,
+      noUnusedLocals: false,
+      noUnusedParameters: false,
+    });
+    // Reduce noisy diagnostics — imports won't resolve without real node_modules
+    monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: false,
+      noSyntaxValidation: false,
+      diagnosticCodesToIgnore: [
+        2307, // Cannot find module 'X'
+        2304, // Cannot find name 'X'
+        2503, // Cannot find namespace 'X'
+        7016, // Could not find declaration file for module 'X'
+        2686, // 'X' refers to a UMD global
+        2792, // Cannot find module 'X'. Did you mean to set...
+        1259, // Module 'X' can only be default-imported using...
+        1192, // Module 'X' has no default export
+        2305, // Module 'X' has no exported member 'Y'
+      ],
+    });
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: false,
     });
     syncProjectTypes(monaco);
 

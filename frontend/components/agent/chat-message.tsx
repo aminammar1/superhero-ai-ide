@@ -168,20 +168,27 @@ function JarvisHud({ actions, color }: { actions: ActionIndicator[]; color: stri
   );
 }
 
-function JarvisStreamingHud({ color }: { color: string }) {
+function JarvisStreamingHud({ color, mode = "task" }: { color: string; mode?: "task" | "explain" }) {
+  const isExplain = mode === "explain";
+  const label = isExplain ? "ANALYZING" : "GENERATING";
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
       className="relative overflow-hidden rounded-lg border max-w-[90%]"
       style={{ borderColor: `${color}10`, background: `linear-gradient(145deg, ${color}03, ${color}06)` }}>
       <motion.div className="absolute left-0 right-0 h-[1px] pointer-events-none"
-        style={{ background: `linear-gradient(90deg, transparent, ${color}12, transparent)` }}
-        animate={{ top: ["0%", "100%", "0%"] }} transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }} />
+        style={{ background: `linear-gradient(90deg, transparent, ${color}${isExplain ? '25' : '12'}, transparent)` }}
+        animate={{ top: ["0%", "100%", "0%"] }} transition={{ duration: isExplain ? 1.8 : 2.5, repeat: Infinity, ease: "easeInOut" }} />
+      {isExplain && (
+        <motion.div className="absolute inset-0 pointer-events-none"
+          style={{ background: `radial-gradient(ellipse at 50% 50%, ${color}06, transparent 70%)` }}
+          animate={{ opacity: [0.3, 0.8, 0.3] }} transition={{ duration: 2, repeat: Infinity }} />
+      )}
       <div className="relative flex items-center gap-2.5 px-2.5 py-2">
         <ArcReactorSpinner color={color} size={24} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="text-[8px] font-mono font-bold tracking-[0.12em] uppercase" style={{ color: `${color}55` }}>
-              GENERATING
+              {label}
             </span>
             <div className="flex items-center gap-[2px]">
               {[0, 1, 2, 3, 4].map(i => (
@@ -191,7 +198,7 @@ function JarvisStreamingHud({ color }: { color: string }) {
               ))}
             </div>
           </div>
-          <HolographicBar progress={50} color={color} />
+          <HolographicBar progress={isExplain ? 65 : 50} color={color} />
         </div>
       </div>
     </motion.div>
@@ -232,7 +239,7 @@ export function ChatMessageBubble({
   message: ChatMessage;
   theme: HeroTheme;
   isStreaming?: boolean;
-  streamMode?: "chat" | "task";
+  streamMode?: "chat" | "task" | "explain";
 }) {
   const hero = heroThemeMap[theme];
   const color = hero.palette[0];
@@ -273,13 +280,13 @@ export function ChatMessageBubble({
     );
   }
 
-  if (isWaitingForFirstChunk || (isStreaming && streamMode === "task" && hasToolContent && !visibleContent)) {
+  if (isWaitingForFirstChunk || (isStreaming && isAssistant && (streamMode === "task" || streamMode === "explain") && hasToolContent && !visibleContent)) {
     return (
       <div className="flex gap-2">
         <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-xl border border-white/[0.08] mt-0.5">
           <Image src={hero.asset} alt={hero.name} fill sizes="24px" className="object-cover" />
         </div>
-        {streamMode === "task" || hasToolContent ? <JarvisStreamingHud color={color} /> : <ChatTypingIndicator color={color} />}
+        {streamMode === "task" || streamMode === "explain" || hasToolContent ? <JarvisStreamingHud color={color} mode={streamMode === "explain" ? "explain" : "task"} /> : <ChatTypingIndicator color={color} />}
       </div>
     );
   }

@@ -227,6 +227,110 @@ function cleanTerminalText(text: string): string {
     .replace(/\r\n?/g, "\n");
 }
 
+/* ────────────────────────────────────────────
+   Detect command category for loading label
+   ──────────────────────────────────────────── */
+type CmdCategory = "npm" | "go" | "cargo" | "pip" | "git" | "server" | "generic";
+
+function detectCmdCategory(command: string): { category: CmdCategory; label: string } {
+  const lower = command.toLowerCase().trim();
+  const cmd = lower.split(/\s+/)[0];
+  const DEV_PATTERNS = ["dev", "start", "serve", "watch", "preview", "run dev", "run start"];
+  const isServer = DEV_PATTERNS.some(p => lower.includes(p)) && ["npm", "npx", "yarn", "pnpm", "node", "python", "python3", "uvicorn", "flask"].includes(cmd);
+  if (isServer) return { category: "server", label: "STARTING SERVER" };
+  if (cmd === "go") return { category: "go", label: lower.includes("mod") ? "RESOLVING GO MODULES" : lower.includes("build") ? "BUILDING GO PROJECT" : lower.includes("test") ? "RUNNING GO TESTS" : "EXECUTING GO COMMAND" };
+  if (["npm", "npx", "yarn", "pnpm"].includes(cmd)) return { category: "npm", label: lower.includes("install") || lower.includes(" i ") || lower === "npm i" ? "INSTALLING PACKAGES" : lower.includes("build") ? "BUILDING PROJECT" : lower.includes("create") ? "SCAFFOLDING PROJECT" : "EXECUTING NPM COMMAND" };
+  if (cmd === "cargo") return { category: "cargo", label: lower.includes("build") ? "COMPILING RUST PROJECT" : lower.includes("install") ? "INSTALLING CRATE" : "EXECUTING CARGO COMMAND" };
+  if (["pip", "pip3"].includes(cmd)) return { category: "pip", label: "INSTALLING PYTHON PACKAGES" };
+  if (cmd === "git") return { category: "git", label: lower.includes("clone") ? "CLONING REPOSITORY" : "EXECUTING GIT COMMAND" };
+  return { category: "generic", label: "EXECUTING COMMAND" };
+}
+
+/* ────────────────────────────────────────────
+   Jarvis Command Loading HUD
+   ──────────────────────────────────────────── */
+function CommandRunningHud({ command, config, elapsed }: {
+  command: string;
+  config: typeof HERO_TERMINAL.ironman;
+  elapsed: number;
+}) {
+  const { label } = detectCmdCategory(command);
+  const elapsedStr = elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative my-2 overflow-hidden rounded-lg border"
+      style={{
+        borderColor: `rgba(${config.colorRgb}, 0.12)`,
+        background: `linear-gradient(145deg, rgba(${config.colorRgb}, 0.02), rgba(${config.colorRgb}, 0.05))`,
+      }}
+    >
+      {/* Scan line */}
+      <motion.div
+        className="absolute left-0 right-0 h-[1px] pointer-events-none z-10"
+        style={{ background: `linear-gradient(90deg, transparent, rgba(${config.colorRgb}, 0.25), transparent)` }}
+        animate={{ top: ["0%", "100%", "0%"] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      />
+      {/* Glow pulse */}
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `radial-gradient(ellipse at 30% 50%, rgba(${config.colorRgb}, 0.04), transparent 70%)` }}
+        animate={{ opacity: [0.3, 0.7, 0.3] }}
+        transition={{ duration: 2.5, repeat: Infinity }}
+      />
+
+      <div className="relative flex items-center gap-3 px-3 py-2.5">
+        {/* Arc reactor spinner */}
+        <div className="relative shrink-0" style={{ width: 28, height: 28 }}>
+          <svg width={28} height={28} viewBox="0 0 28 28">
+            <motion.circle cx={14} cy={14} r={12} fill="none" stroke={config.color} strokeWidth="0.8" strokeDasharray="5 4" opacity={0.25}
+              animate={{ rotate: 360 }} transition={{ duration: 6, repeat: Infinity, ease: "linear" }} style={{ transformOrigin: "center" }} />
+            <motion.circle cx={14} cy={14} r={8} fill="none" stroke={config.color} strokeWidth="1.2" strokeDasharray="8 5" opacity={0.45}
+              animate={{ rotate: -360 }} transition={{ duration: 4, repeat: Infinity, ease: "linear" }} style={{ transformOrigin: "center" }} />
+            <circle cx={14} cy={14} r={4} fill={`rgba(${config.colorRgb}, 0.08)`} stroke={config.color} strokeWidth="0.8" opacity={0.5} />
+          </svg>
+          <motion.div className="absolute rounded-full"
+            style={{ width: 8, height: 8, top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+              background: `radial-gradient(circle, rgba(${config.colorRgb}, 0.4), transparent 70%)` }}
+            animate={{ scale: [1, 1.8, 1], opacity: [0.3, 0.8, 0.3] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+          />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* Label + elapsed */}
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[9px] font-mono font-bold tracking-[0.14em]" style={{ color: config.color }}>
+              {label}
+            </span>
+            <div className="flex items-center gap-[2px]">
+              {[0, 1, 2, 3, 4].map(i => (
+                <motion.div key={i} className="w-[1.5px] rounded-full" style={{ background: config.color }}
+                  animate={{ height: [2, 7 + Math.random() * 5, 2], opacity: [0.2, 0.6, 0.2] }}
+                  transition={{ duration: 0.4 + Math.random() * 0.2, repeat: Infinity, delay: i * 0.06 }} />
+              ))}
+            </div>
+            <span className="ml-auto text-[8px] font-mono" style={{ color: `rgba(${config.colorRgb}, 0.35)` }}>
+              {elapsedStr}
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div className="relative h-[2px] w-full overflow-hidden rounded-full" style={{ background: `rgba(${config.colorRgb}, 0.08)` }}>
+            <motion.div className="absolute inset-y-0 h-full w-8"
+              style={{ background: `linear-gradient(90deg, transparent, ${config.color}, transparent)`, opacity: 0.5 }}
+              animate={{ left: ["-10%", "110%"] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "linear" }}
+            />
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function OutputBlock({ text, isError, config }: {
   text: string;
   isError: boolean;
@@ -268,12 +372,20 @@ export function TerminalOutput() {
   const [cmdLog, setCmdLog] = useState<string[]>([]);
   const [bootComplete, setBootComplete] = useState(false);
   const [isCommandRunning, setCommandRunning] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  // Elapsed time ticker while command is running
+  useEffect(() => {
+    if (!isCommandRunning) { setElapsed(0); return; }
+    const t = setInterval(() => setElapsed(prev => prev + 1), 1000);
+    return () => clearInterval(t);
+  }, [isCommandRunning]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [output, cmdHistory, bootComplete]);
+  }, [output, cmdHistory, bootComplete, isCommandRunning, elapsed]);
 
   const handleCommand = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowUp") {
@@ -368,7 +480,7 @@ export function TerminalOutput() {
       setCommandRunning(true);
       setCmdHistory(prev => [...prev, {
         cmd: currentInput,
-        output: "Running command. Long npm installs can take several minutes...",
+        output: "__RUNNING__",
         isError: false,
       }]);
 
@@ -379,7 +491,9 @@ export function TerminalOutput() {
           let resultText = "";
           if (result.stdout) resultText += cleanTerminalText(result.stdout);
           if (result.stderr) resultText += (resultText ? "\n" : "") + cleanTerminalText(result.stderr);
-          if (!resultText) resultText = `Process exited with code ${result.exit_code}`;
+          if (!resultText) {
+            resultText = result.exit_code === 0 ? "✓ Done" : `✘ Process exited with code ${result.exit_code}`;
+          }
           updated[updated.length - 1] = {
             cmd: currentInput,
             output: resultText,
@@ -387,13 +501,21 @@ export function TerminalOutput() {
           };
           return updated;
         });
-        try {
-          const workspace = await scanWorkspaceTree();
-          if (workspace.success && workspace.files) {
-            useFileStore.getState().refreshFromImportTree(workspace.files);
+        // Only refresh workspace tree for commands that likely modify files
+        const lowerCmd = currentInput.toLowerCase().trim();
+        const modifiesFiles = /^(npm|npx|yarn|pnpm|pip|go|cargo|git|mkdir|rm|mv|cp|touch|echo|cat\s*>|tee|wget|curl.*-o|unzip|tar)\b/.test(lowerCmd)
+          || lowerCmd.includes("install") || lowerCmd.includes("init") || lowerCmd.includes("create")
+          || lowerCmd.includes("build") || lowerCmd.includes("tidy") || lowerCmd.includes("get")
+          || lowerCmd.includes("mod ") || lowerCmd.includes("add ");
+        if (modifiesFiles) {
+          try {
+            const workspace = await scanWorkspaceTree();
+            if (workspace.success && workspace.files) {
+              useFileStore.getState().refreshFromImportTree(workspace.files);
+            }
+          } catch {
+            // The command result is still useful if workspace refresh is temporarily unavailable.
           }
-        } catch {
-          // The command result is still useful if workspace refresh is temporarily unavailable.
         }
       } catch (err) {
         setCmdHistory(prev => {
@@ -555,24 +677,31 @@ export function TerminalOutput() {
         )}
 
         {/* Command History */}
-        {cmdHistory.map((entry, i) => (
-          <div key={i} className="mb-3">
-            <div className="flex items-center gap-1.5">
-              <ChevronRight className="h-2.5 w-2.5" style={{ color: config.color }} />
-              <span
-                className="text-[10px] font-bold"
-                style={{ color: config.color, textShadow: `0 0 10px rgba(${config.colorRgb}, 0.3)` }}
-              >
-                {config.prompt}
-              </span>
-              <span style={{ color: `rgba(${config.colorRgb}, 0.3)` }}>›</span>
-              <span style={{ color: `rgba(${config.colorRgb}, 0.7)` }}>{entry.cmd}</span>
+        {cmdHistory.map((entry, i) => {
+          const isRunningEntry = entry.output === "__RUNNING__";
+          return (
+            <div key={i} className="mb-3">
+              <div className="flex items-center gap-1.5">
+                <ChevronRight className="h-2.5 w-2.5" style={{ color: config.color }} />
+                <span
+                  className="text-[10px] font-bold"
+                  style={{ color: config.color, textShadow: `0 0 10px rgba(${config.colorRgb}, 0.3)` }}
+                >
+                  {config.prompt}
+                </span>
+                <span style={{ color: `rgba(${config.colorRgb}, 0.3)` }}>›</span>
+                <span style={{ color: `rgba(${config.colorRgb}, 0.7)` }}>{entry.cmd}</span>
+              </div>
+              <div className="ml-5 mt-0.5">
+                {isRunningEntry ? (
+                  <CommandRunningHud command={entry.cmd} config={config} elapsed={elapsed} />
+                ) : (
+                  <OutputBlock text={entry.output} isError={entry.isError} config={config} />
+                )}
+              </div>
             </div>
-            <div className="ml-5 mt-0.5">
-              <OutputBlock text={entry.output} isError={entry.isError} config={config} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Interactive Prompt */}
         {bootComplete && !isRunningCode && (
